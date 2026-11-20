@@ -11,8 +11,16 @@ android {
         applicationId = "com.barsik.assistant"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
+
+        // Ключ подставляется при сборке из секрета GEMINI_API_KEY (в репозитории его нет)
+        val key = System.getenv("GEMINI_API_KEY") ?: ""
+        buildConfigField("String", "GEMINI_KEY", "\"$key\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     compileOptions {

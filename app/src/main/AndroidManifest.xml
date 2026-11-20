@@ -17,7 +17,7 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@drawable/barsik"
+        android:icon="@drawable/barsik_avatar"
         android:label="Барсик"
         android:theme="@style/Theme.Barsik">
         <activity

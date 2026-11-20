@@ -1,27 +1,40 @@
 package com.barsik.assistant
 
+import android.animation.ObjectAnimator
+import android.animation.PropertyValuesHolder
 import android.app.AlertDialog
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.Outline
 import android.media.AudioManager
 import android.net.Uri
+import android.os.Bundle
 import android.provider.AlarmClock
 import android.speech.RecognizerIntent
-import android.os.Bundle
+import android.view.Gravity
 import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewOutlineProvider
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.view.inputmethod.EditorInfo
-import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -30,9 +43,13 @@ class MainActivity : AppCompatActivity() {
         const val MODEL = "gemini-2.5-flash"
     }
 
-    private lateinit var chat: TextView
+    private lateinit var msgs: LinearLayout
     private lateinit var scroll: ScrollView
     private lateinit var input: EditText
+    private lateinit var status: TextView
+
+    private var typingView: View? = null
+    private var typingAnim: ObjectAnimator? = null
 
     private val history = JSONArray()
     private val prefs by lazy { getSharedPreferences("barsik", MODE_PRIVATE) }
@@ -44,31 +61,170 @@ class MainActivity : AppCompatActivity() {
         if (!text.isNullOrBlank()) send(text)
     }
 
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Во весь экран, прозрачные системные панели
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
+
         setContentView(R.layout.activity_main)
-        chat = findViewById(R.id.chat)
+
+        val content = findViewById<View>(R.id.content)
+        ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
+            val i = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
+            v.setPadding(dp(14) + i.left, dp(10) + i.top, dp(14) + i.right, dp(10) + i.bottom)
+            insets
+        }
+
+        msgs = findViewById(R.id.msgs)
         scroll = findViewById(R.id.scroll)
         input = findViewById(R.id.input)
+        status = findViewById(R.id.status)
 
-        findViewById<Button>(R.id.sendBtn).setOnClickListener { sendFromInput() }
-        findViewById<Button>(R.id.keyBtn).setOnClickListener { askKey() }
-        findViewById<Button>(R.id.micBtn).setOnClickListener { listen() }
+        val sendBtn = findViewById<View>(R.id.sendBtn)
+        val micBtn = findViewById<View>(R.id.micBtn)
+        val keyBtn = findViewById<View>(R.id.keyBtn)
+        sendBtn.setOnClickListener { sendFromInput() }
+        micBtn.setOnClickListener { listen() }
+        keyBtn.setOnClickListener { askKey() }
+        listOf(sendBtn, micBtn, keyBtn).forEach { it.pressable() }
         input.setOnEditorActionListener { _, id, _ ->
             if (id == EditorInfo.IME_ACTION_SEND) { sendFromInput(); true } else false
         }
 
-        addLine("Барсик: Мяу! Я Барсик. Могу искать в браузере, открывать приложения, " +
-                "ставить музыку и видео на паузу, заводить таймер и просто болтать.")
+        // Круглый аватар
+        val avatar = findViewById<View>(R.id.avatar)
+        avatar.outlineProvider = object : ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: Outline) {
+                outline.setOval(0, 0, view.width, view.height)
+            }
+        }
+        avatar.clipToOutline = true
+
+        // Аватар «дышит»
+        ObjectAnimator.ofPropertyValuesHolder(
+            findViewById<View>(R.id.avatarRing),
+            PropertyValuesHolder.ofFloat("scaleX", 1f, 1.06f),
+            PropertyValuesHolder.ofFloat("scaleY", 1f, 1.06f)
+        ).apply {
+            duration = 2400
+            repeatCount = ObjectAnimator.INFINITE
+            repeatMode = ObjectAnimator.REVERSE
+            interpolator = AccelerateDecelerateInterpolator()
+            start()
+        }
+
+        // Появление шапки и поля ввода
+        findViewById<View>(R.id.header).apply {
+            alpha = 0f; translationY = -dp(40).toFloat()
+            animate().alpha(1f).translationY(0f).setDuration(600)
+                .setInterpolator(OvershootInterpolator(1.1f)).start()
+        }
+        findViewById<View>(R.id.inputBar).apply {
+            alpha = 0f; translationY = dp(60).toFloat()
+            animate().alpha(1f).translationY(0f).setDuration(600).setStartDelay(150)
+                .setInterpolator(OvershootInterpolator(1.1f)).start()
+        }
+
+        msgs.postDelayed({
+            addBubble(
+                "Мяу! Я Барсик 🐾 Могу искать в браузере, открывать приложения, " +
+                        "ставить музыку и видео на паузу, заводить таймер и просто болтать.",
+                false
+            )
+        }, 500)
+
         if (apiKey().isBlank()) askKey()
     }
 
-    private fun apiKey() = prefs.getString("key", "") ?: ""
+    // ---------- Анимации и пузыри ----------
+
+    private fun View.pressable() {
+        setOnTouchListener { v, e ->
+            when (e.action) {
+                MotionEvent.ACTION_DOWN ->
+                    v.animate().scaleX(0.86f).scaleY(0.86f).setDuration(110)
+                        .setInterpolator(DecelerateInterpolator()).start()
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(380)
+                        .setInterpolator(OvershootInterpolator(3f)).start()
+            }
+            false
+        }
+    }
+
+    private fun addBubble(text: String, user: Boolean): View {
+        val tv = TextView(this).apply {
+            this.text = text
+            setTextColor(Color.WHITE)
+            textSize = 16f
+            setLineSpacing(dp(2).toFloat(), 1f)
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+            setBackgroundResource(if (user) R.drawable.bg_bubble_user else R.drawable.bg_bubble_bot)
+            maxWidth = (resources.displayMetrics.widthPixels * 0.78).toInt()
+        }
+        val lp = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            gravity = if (user) Gravity.END else Gravity.START
+            topMargin = dp(5); bottomMargin = dp(5)
+        }
+        msgs.addView(tv, lp)
+
+        tv.alpha = 0f
+        tv.translationY = dp(26).toFloat()
+        tv.scaleX = 0.92f; tv.scaleY = 0.92f
+        tv.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+            .setDuration(420).setInterpolator(OvershootInterpolator(1.2f)).start()
+        scrollDown()
+        return tv
+    }
+
+    private fun showTyping() {
+        hideTyping()
+        status.text = "печатает…"
+        val v = addBubble("●  ●  ●", false)
+        typingView = v
+        typingAnim = ObjectAnimator.ofFloat(v, "alpha", 1f, 0.35f).apply {
+            duration = 650
+            repeatCount = ObjectAnimator.INFINITE
+            repeatMode = ObjectAnimator.REVERSE
+            startDelay = 450
+            start()
+        }
+    }
+
+    private fun hideTyping() {
+        typingAnim?.cancel(); typingAnim = null
+        typingView?.let { msgs.removeView(it) }
+        typingView = null
+        status.text = "онлайн"
+    }
+
+    private fun scrollDown() {
+        scroll.postDelayed({ scroll.smoothScrollTo(0, msgs.bottom) }, 80)
+    }
+
+    // ---------- Ключ и ввод ----------
+
+    // Сначала ключ, введённый вручную; если его нет — ключ, вшитый при сборке
+    private fun apiKey(): String {
+        val saved = prefs.getString("key", "") ?: ""
+        return if (saved.isNotBlank()) saved else BuildConfig.GEMINI_KEY
+    }
 
     private fun askKey() {
         val et = EditText(this).apply {
             hint = "Ключ Gemini API"
-            setText(apiKey())
+            setText(prefs.getString("key", ""))
         }
         AlertDialog.Builder(this)
             .setTitle("Ключ Gemini (бесплатный)")
@@ -101,13 +257,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun send(text: String) {
         if (apiKey().isBlank()) { askKey(); return }
-        addLine("Ты: $text")
+        addBubble(text, true)
+        showTyping()
         Thread {
             try {
                 val res = askGemini(text)
-                runOnUiThread { handle(res) }
+                runOnUiThread { hideTyping(); handle(res) }
             } catch (e: Exception) {
-                runOnUiThread { addLine("Барсик: Мяу... ошибка: ${e.message}") }
+                runOnUiThread { hideTyping(); addBubble("Мяу... ошибка: ${e.message}", false) }
             }
         }.start()
     }
@@ -164,7 +321,13 @@ class MainActivity : AppCompatActivity() {
         val raw = stream.bufferedReader().use { it.readText() }
         if (code !in 200..299) {
             history.remove(history.length() - 1)
-            throw RuntimeException(if (code == 429) "лимит бесплатных запросов, подожди минуту" else "HTTP $code")
+            throw RuntimeException(
+                when (code) {
+                    429 -> "лимит бесплатных запросов, подожди минуту"
+                    400, 403 -> "ключ не подошёл (нажми 🔑)"
+                    else -> "HTTP $code"
+                }
+            )
         }
 
         val text = JSONObject(raw).getJSONArray("candidates").getJSONObject(0)
@@ -180,12 +343,12 @@ class MainActivity : AppCompatActivity() {
     // ---------- Действия ----------
 
     private fun handle(res: JSONObject) {
-        addLine("Барсик: " + res.optString("reply", "Мяу!"))
+        addBubble(res.optString("reply", "Мяу!"), false)
         val acts = res.optJSONArray("actions") ?: return
         for (n in 0 until acts.length()) {
             val a = acts.getJSONObject(n)
             try { run(a.optString("type"), a.optString("arg")) }
-            catch (e: Exception) { addLine("Барсик: не получилось (${a.optString("type")})") }
+            catch (e: Exception) { addBubble("Не получилось выполнить: ${a.optString("type")}", false) }
         }
     }
 
@@ -226,10 +389,5 @@ class MainActivity : AppCompatActivity() {
     private fun volume(dir: Int) {
         val am = getSystemService(AUDIO_SERVICE) as AudioManager
         am.adjustStreamVolume(AudioManager.STREAM_MUSIC, dir, AudioManager.FLAG_SHOW_UI)
-    }
-
-    private fun addLine(s: String) {
-        chat.append(s + "\n\n")
-        scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
     }
 }
