@@ -14,9 +14,9 @@ android {
         versionCode = 2
         versionName = "2.0"
 
-        // Ключ подставляется при сборке из секрета GEMINI_API_KEY (в репозитории его нет)
-        val key = System.getenv("GEMINI_API_KEY") ?: ""
-        buildConfigField("String", "GEMINI_KEY", "\"$key\"")
+        // Ключ подставляется при сборке из секрета OPENROUTER_API_KEY (в репозитории его нет)
+        val key = System.getenv("OPENROUTER_API_KEY") ?: ""
+        buildConfigField("String", "AI_KEY", "\"$key\"")
     }
 
     buildFeatures {

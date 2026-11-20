@@ -38,11 +38,6 @@ import java.net.URLEncoder
 
 class MainActivity : AppCompatActivity() {
 
-    companion object {
-        // Бесплатная модель Gemini. Если Google её переименует — поменяй здесь.
-        const val MODEL = "gemini-2.5-flash"
-    }
-
     private lateinit var msgs: LinearLayout
     private lateinit var scroll: ScrollView
     private lateinit var input: EditText
@@ -218,17 +213,17 @@ class MainActivity : AppCompatActivity() {
     // Сначала ключ, введённый вручную; если его нет — ключ, вшитый при сборке
     private fun apiKey(): String {
         val saved = prefs.getString("key", "") ?: ""
-        return if (saved.isNotBlank()) saved else BuildConfig.GEMINI_KEY
+        return if (saved.isNotBlank()) saved else BuildConfig.AI_KEY
     }
 
     private fun askKey() {
         val et = EditText(this).apply {
-            hint = "Ключ Gemini API"
+            hint = "Ключ OpenRouter (sk-or-...)"
             setText(prefs.getString("key", ""))
         }
         AlertDialog.Builder(this)
-            .setTitle("Ключ Gemini (бесплатный)")
-            .setMessage("Получи его бесплатно на aistudio.google.com/apikey и вставь сюда.")
+            .setTitle("Ключ OpenRouter (бесплатный)")
+            .setMessage("Получи его бесплатно на openrouter.ai/keys и вставь сюда.")
             .setView(et)
             .setPositiveButton("Сохранить") { _, _ ->
                 prefs.edit().putString("key", et.text.toString().trim()).apply()
@@ -261,7 +256,7 @@ class MainActivity : AppCompatActivity() {
         showTyping()
         Thread {
             try {
-                val res = askGemini(text)
+                val res = askAI(text)
                 runOnUiThread { hideTyping(); handle(res) }
             } catch (e: Exception) {
                 runOnUiThread { hideTyping(); addBubble("Мяу... ошибка: ${e.message}", false) }
@@ -296,48 +291,92 @@ class MainActivity : AppCompatActivity() {
 """.trimIndent()
     }
 
-    private fun askGemini(userText: String): JSONObject {
-        history.put(JSONObject().put("role", "user")
-            .put("parts", JSONArray().put(JSONObject().put("text", userText))))
+    private class ModelError : Exception("модель сейчас недоступна, попробуй позже")
 
-        val body = JSONObject()
-            .put("systemInstruction", JSONObject()
-                .put("parts", JSONArray().put(JSONObject().put("text", systemPrompt()))))
-            .put("contents", history)
-            .put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
+    private fun model(): String = prefs.getString("model", null) ?: "openrouter/free"
 
-        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent")
-        val c = url.openConnection() as HttpURLConnection
+    private fun askAI(userText: String): JSONObject {
+        history.put(JSONObject().put("role", "user").put("content", userText))
+        try {
+            val text = try {
+                callAI()
+            } catch (e: ModelError) {
+                // Выбранной модели нет — подбираем любую бесплатную из списка OpenRouter
+                prefs.edit().putString("model", pickFreeModel()).apply()
+                callAI()
+            }
+            history.put(JSONObject().put("role", "assistant").put("content", text))
+            while (history.length() > 12) { history.remove(0); history.remove(0) }
+            return parseReply(text)
+        } catch (e: Exception) {
+            history.remove(history.length() - 1)
+            throw e
+        }
+    }
+
+    private fun callAI(): String {
+        val messages = JSONArray().put(
+            JSONObject().put("role", "system").put("content", systemPrompt())
+        )
+        for (i in 0 until history.length()) messages.put(history.getJSONObject(i))
+        val body = JSONObject().put("model", model()).put("messages", messages)
+
+        val c = URL("https://openrouter.ai/api/v1/chat/completions").openConnection() as HttpURLConnection
         c.requestMethod = "POST"
         c.connectTimeout = 15000
-        c.readTimeout = 40000
+        c.readTimeout = 60000
         c.doOutput = true
         c.setRequestProperty("Content-Type", "application/json")
-        c.setRequestProperty("x-goog-api-key", apiKey())
+        c.setRequestProperty("Authorization", "Bearer " + apiKey())
+        c.setRequestProperty("X-Title", "Barsik")
         c.outputStream.use { it.write(body.toString().toByteArray()) }
 
         val code = c.responseCode
         val stream = if (code in 200..299) c.inputStream else c.errorStream
         val raw = stream.bufferedReader().use { it.readText() }
         if (code !in 200..299) {
-            history.remove(history.length() - 1)
+            if (code == 400 || code == 404) throw ModelError()
             throw RuntimeException(
                 when (code) {
+                    401 -> "ключ не подошёл (нажми 🔑)"
+                    402 -> "на OpenRouter нужны кредиты"
                     429 -> "лимит бесплатных запросов, подожди минуту"
-                    400, 403 -> "ключ не подошёл (нажми 🔑)"
                     else -> "HTTP $code"
                 }
             )
         }
+        val j = JSONObject(raw)
+        if (j.has("error")) throw ModelError()
+        return j.getJSONArray("choices").getJSONObject(0)
+            .getJSONObject("message").optString("content")
+    }
 
-        val text = JSONObject(raw).getJSONArray("candidates").getJSONObject(0)
-            .getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
+    private fun pickFreeModel(): String {
+        val c = URL("https://openrouter.ai/api/v1/models").openConnection() as HttpURLConnection
+        c.connectTimeout = 15000
+        c.readTimeout = 30000
+        val data = JSONObject(c.inputStream.bufferedReader().use { it.readText() }).getJSONArray("data")
+        val free = mutableListOf<String>()
+        for (i in 0 until data.length()) {
+            val id = data.getJSONObject(i).optString("id")
+            if (id.endsWith(":free")) free.add(id)
+        }
+        val prefer = listOf("llama-3.3", "qwen", "gemma", "mistral", "deepseek", "gpt-oss", "glm", "kimi")
+        for (p in prefer) {
+            free.firstOrNull { it.contains(p, true) && !it.contains("vl") && !it.contains("coder") }
+                ?.let { return it }
+        }
+        return free.firstOrNull() ?: throw RuntimeException("нет бесплатных моделей")
+    }
 
-        history.put(JSONObject().put("role", "model")
-            .put("parts", JSONArray().put(JSONObject().put("text", text))))
-        while (history.length() > 12) history.remove(0)
-
-        return JSONObject(text)
+    // Модель может вернуть JSON в обёртке или просто текст — разбираем оба случая
+    private fun parseReply(t: String): JSONObject {
+        val s = t.indexOf('{')
+        val e = t.lastIndexOf('}')
+        if (s >= 0 && e > s) {
+            try { return JSONObject(t.substring(s, e + 1)) } catch (_: Exception) {}
+        }
+        return JSONObject().put("reply", t.trim().ifEmpty { "Мяу?" })
     }
 
     // ---------- Действия ----------
