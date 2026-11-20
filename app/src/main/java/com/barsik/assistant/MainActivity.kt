@@ -1,18 +1,17 @@
 package com.barsik.assistant
 
+import android.Manifest
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Outline
-import android.media.AudioManager
-import android.net.Uri
 import android.os.Bundle
-import android.provider.AlarmClock
+import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.view.Gravity
-import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewOutlineProvider
@@ -27,41 +26,38 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import org.json.JSONArray
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
 
 class MainActivity : AppCompatActivity() {
+
+    private val greeting = "Мяу! Я Барсик 🐾 Могу искать в браузере, открывать приложения, " +
+            "ставить музыку на паузу, заводить таймер. Включи управление экраном в 🔑, " +
+            "и я смогу нажимать кнопки в других приложениях."
 
     private lateinit var msgs: LinearLayout
     private lateinit var scroll: ScrollView
     private lateinit var input: EditText
     private lateinit var status: TextView
-
     private var typingView: View? = null
     private var typingAnim: ObjectAnimator? = null
+    private var history = JSONArray()
 
-    private val history = JSONArray()
-    private val prefs by lazy { getSharedPreferences("barsik", MODE_PRIVATE) }
-
-    private val voice = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { r ->
+    private val voice = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val text = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
         if (!text.isNullOrBlank()) send(text)
     }
+
+    private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Во весь экран, прозрачные системные панели
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
@@ -69,11 +65,9 @@ class MainActivity : AppCompatActivity() {
             isAppearanceLightStatusBars = false
             isAppearanceLightNavigationBars = false
         }
-
         setContentView(R.layout.activity_main)
 
-        val content = findViewById<View>(R.id.content)
-        ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.content)) { v, insets ->
             val i = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
             v.setPadding(dp(14) + i.left, dp(10) + i.top, dp(14) + i.right, dp(10) + i.bottom)
             insets
@@ -89,13 +83,12 @@ class MainActivity : AppCompatActivity() {
         val keyBtn = findViewById<View>(R.id.keyBtn)
         sendBtn.setOnClickListener { sendFromInput() }
         micBtn.setOnClickListener { listen() }
-        keyBtn.setOnClickListener { askKey() }
+        keyBtn.setOnClickListener { showMenu() }
         listOf(sendBtn, micBtn, keyBtn).forEach { it.pressable() }
         input.setOnEditorActionListener { _, id, _ ->
             if (id == EditorInfo.IME_ACTION_SEND) { sendFromInput(); true } else false
         }
 
-        // Круглый аватар
         val avatar = findViewById<View>(R.id.avatar)
         avatar.outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(view: View, outline: Outline) {
@@ -104,7 +97,6 @@ class MainActivity : AppCompatActivity() {
         }
         avatar.clipToOutline = true
 
-        // Аватар «дышит»
         ObjectAnimator.ofPropertyValuesHolder(
             findViewById<View>(R.id.avatarRing),
             PropertyValuesHolder.ofFloat("scaleX", 1f, 1.06f),
@@ -117,7 +109,6 @@ class MainActivity : AppCompatActivity() {
             start()
         }
 
-        // Появление шапки и поля ввода
         findViewById<View>(R.id.header).apply {
             alpha = 0f; translationY = -dp(40).toFloat()
             animate().alpha(1f).translationY(0f).setDuration(600)
@@ -129,17 +120,26 @@ class MainActivity : AppCompatActivity() {
                 .setInterpolator(OvershootInterpolator(1.1f)).start()
         }
 
-        msgs.postDelayed({
-            addBubble(
-                "Мяу! Я Барсик 🐾 Могу искать в браузере, открывать приложения, " +
-                        "ставить музыку и видео на паузу, заводить таймер и просто болтать.",
-                false
-            )
-        }, 500)
+        // Память: показываем прошлый разговор, он сохраняется между запусками
+        history = Brain.loadHistory(this)
+        if (history.length() == 0) {
+            msgs.postDelayed({ addBubble(greeting, false) }, 400)
+        } else {
+            for (i in 0 until history.length()) {
+                val m = history.getJSONObject(i)
+                val isUser = m.optString("role") == "user"
+                val text = if (isUser) m.optString("content")
+                else Brain.parseReply(m.optString("content")).optString("reply", m.optString("content"))
+                addBubble(text, isUser, animate = false)
+            }
+        }
 
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
 
-    // ---------- Анимации и пузыри ----------
+    // ---------- анимации и пузыри ----------
 
     private fun View.pressable() {
         setOnTouchListener { v, e ->
@@ -155,7 +155,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun addBubble(text: String, user: Boolean): View {
+    private fun addBubble(text: String, user: Boolean, animate: Boolean = true): View {
         val tv = TextView(this).apply {
             this.text = text
             setTextColor(Color.WHITE)
@@ -172,13 +172,14 @@ class MainActivity : AppCompatActivity() {
             topMargin = dp(5); bottomMargin = dp(5)
         }
         msgs.addView(tv, lp)
-
-        tv.alpha = 0f
-        tv.translationY = dp(26).toFloat()
-        tv.scaleX = 0.92f; tv.scaleY = 0.92f
-        tv.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
-            .setDuration(420).setInterpolator(OvershootInterpolator(1.2f)).start()
-        scrollDown()
+        if (animate) {
+            tv.alpha = 0f
+            tv.translationY = dp(26).toFloat()
+            tv.scaleX = 0.92f; tv.scaleY = 0.92f
+            tv.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+                .setDuration(420).setInterpolator(OvershootInterpolator(1.2f)).start()
+        }
+        scroll.postDelayed({ scroll.smoothScrollTo(0, msgs.bottom) }, 80)
         return tv
     }
 
@@ -203,68 +204,7 @@ class MainActivity : AppCompatActivity() {
         status.text = "онлайн"
     }
 
-    private fun scrollDown() {
-        scroll.postDelayed({ scroll.smoothScrollTo(0, msgs.bottom) }, 80)
-    }
-
-    // ---------- Ключ и ввод ----------
-
-    // Сначала ключ, введённый вручную; если его нет — ключ, вшитый при сборке
-    private fun apiKey(): String {
-        val saved = prefs.getString("key", "") ?: ""
-        return if (saved.isNotBlank()) saved else BuildConfig.AI_KEY
-    }
-
-    private val presets = listOf(
-        Triple("Pollinations (без ключа)", "https://text.pollinations.ai/openai", "openai"),
-        Triple("Mistral", "https://api.mistral.ai/v1/chat/completions", "mistral-small-latest"),
-        Triple("Groq", "https://api.groq.com/openai/v1/chat/completions", "llama-3.3-70b-versatile"),
-        Triple("DeepSeek", "https://api.deepseek.com/chat/completions", "deepseek-chat"),
-        Triple("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", "openrouter/free"),
-        Triple("Свой вариант", "", "")
-    )
-
-    // Сначала выбор сервиса, потом поля адреса, модели и ключа
-    private fun askKey() {
-        AlertDialog.Builder(this)
-            .setTitle("Какой ИИ использовать?")
-            .setItems(presets.map { it.first }.toTypedArray()) { _, i ->
-                val p = presets[i]
-                showSettings(
-                    if (p.second.isEmpty()) aiUrl() else p.second,
-                    if (p.third.isEmpty()) aiModel() else p.third
-                )
-            }
-            .setNegativeButton("Отмена", null)
-            .show()
-    }
-
-    private fun showSettings(url: String, model: String) {
-        fun field(h: String, v: String) = EditText(this).apply {
-            hint = h; setText(v); setSingleLine(true)
-        }
-        val fUrl = field("Адрес API", url)
-        val fModel = field("Модель", model)
-        val fKey = field("Ключ (если нужен)", prefs.getString("key", "") ?: "")
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(8), dp(24), 0)
-            addView(fUrl); addView(fModel); addView(fKey)
-        }
-        AlertDialog.Builder(this)
-            .setTitle("Настройки ИИ")
-            .setView(box)
-            .setPositiveButton("Сохранить") { _, _ ->
-                prefs.edit()
-                    .putString("url", fUrl.text.toString().trim())
-                    .putString("model", fModel.text.toString().trim())
-                    .putString("key", fKey.text.toString().trim())
-                    .apply()
-                Toast.makeText(this, "Сохранено", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Отмена", null)
-            .show()
-    }
+    // ---------- ввод и ответы ----------
 
     private fun listen() {
         val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -289,153 +229,108 @@ class MainActivity : AppCompatActivity() {
         showTyping()
         Thread {
             try {
-                val res = askAI(text)
-                runOnUiThread { hideTyping(); handle(res) }
+                val res = Brain.chat(this, history, text)
+                runOnUiThread {
+                    hideTyping()
+                    addBubble(res.optString("reply", "Мяу!"), false)
+                    runActions(res.optJSONArray("actions"))
+                }
             } catch (e: Exception) {
-                runOnUiThread { hideTyping(); addBubble("Мяу... ошибка: ${e.message}", false) }
+                runOnUiThread {
+                    hideTyping()
+                    addBubble("Мяу... ошибка: ${e.message}", false)
+                }
             }
         }.start()
     }
 
-    // ---------- ИИ ----------
-
-    private fun installedApps(): List<Pair<String, String>> {
-        val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        return packageManager.queryIntentActivities(i, 0)
-            .map { it.loadLabel(packageManager).toString() to it.activityInfo.packageName }
-            .sortedBy { it.first.lowercase() }
-    }
-
-    private fun systemPrompt(): String {
-        val apps = installedApps().joinToString(", ") { it.first }
-        return """
-Ты — Барсик, дружелюбный серый кот и голосовой помощник на телефоне. Отвечай по-русски, коротко, чуть игриво (иногда "мяу").
-Ты умеешь выполнять действия на телефоне. Ответ ВСЕГДА строго JSON вида:
-{"reply":"текст пользователю","actions":[{"type":"...","arg":"..."}]}
-Доступные type:
-- "search": arg = поисковый запрос (открыть поиск в браузере)
-- "open_url": arg = полный URL
-- "open_app": arg = точное название приложения из списка установленных
-- "media_pause", "media_play", "media_stop", "media_next", "media_prev": остановить/продолжить/следующий/предыдущий трек или видео (arg пустой)
-- "volume_up", "volume_down": громкость
-- "timer": arg = число секунд
-Если действий не нужно (просто разговор) — "actions":[]. Не выдумывай приложения, которых нет в списке.
-Установленные приложения: $apps
-""".trimIndent()
-    }
-
-    private val defaultUrl = "https://text.pollinations.ai/openai"
-    private val defaultModel = "openai"
-
-    private fun aiUrl() = prefs.getString("url", null)?.takeIf { it.isNotBlank() } ?: defaultUrl
-    private fun aiModel() = prefs.getString("model", null)?.takeIf { it.isNotBlank() } ?: defaultModel
-
-    private fun askAI(userText: String): JSONObject {
-        history.put(JSONObject().put("role", "user").put("content", userText))
-        try {
-            val text = callAI()
-            history.put(JSONObject().put("role", "assistant").put("content", text))
-            while (history.length() > 12) { history.remove(0); history.remove(0) }
-            return parseReply(text)
-        } catch (e: Exception) {
-            history.remove(history.length() - 1)
-            throw e
+    private fun runActions(arr: JSONArray?) {
+        if (arr == null) return
+        for (n in 0 until arr.length()) {
+            val a = arr.getJSONObject(n)
+            val type = a.optString("type")
+            val arg = a.optString("arg")
+            if (type == "screen_task") {
+                val svc = BarsikService.instance
+                if (svc == null) addBubble("Чтобы я управлял экраном, включи меня: 🔑 → «Включить управление экраном».", false)
+                else svc.runGoalAsync(arg)
+            } else {
+                Brain.execute(this, type, arg)
+            }
         }
     }
 
-    // Любой сервис с форматом OpenAI (chat/completions)
-    private fun callAI(): String {
-        val messages = JSONArray().put(
-            JSONObject().put("role", "system").put("content", systemPrompt())
-        )
-        for (i in 0 until history.length()) messages.put(history.getJSONObject(i))
-        val body = JSONObject().put("model", aiModel()).put("messages", messages)
+    // ---------- меню и настройки ----------
 
-        val c = URL(aiUrl()).openConnection() as HttpURLConnection
-        c.requestMethod = "POST"
-        c.connectTimeout = 15000
-        c.readTimeout = 60000
-        c.doOutput = true
-        c.setRequestProperty("Content-Type", "application/json")
-        if (apiKey().isNotBlank()) c.setRequestProperty("Authorization", "Bearer " + apiKey())
-        c.outputStream.use { it.write(body.toString().toByteArray()) }
-
-        val code = c.responseCode
-        val stream = if (code in 200..299) c.inputStream else c.errorStream
-        val raw = stream?.bufferedReader()?.use { it.readText() } ?: ""
-        if (code !in 200..299) {
-            throw RuntimeException(
-                when (code) {
-                    401, 403 -> "ключ не подошёл (нажми 🔑)"
-                    400, 404 -> "адрес или модель не подошли (нажми 🔑)"
-                    402 -> "на сервисе нужны кредиты"
-                    429 -> "лимит запросов, подожди минуту"
-                    else -> "HTTP $code"
+    private fun showMenu() {
+        AlertDialog.Builder(this)
+            .setTitle("Барсик")
+            .setItems(arrayOf("Сервис ИИ и ключ", "Включить управление экраном", "Очистить память")) { _, i ->
+                when (i) {
+                    0 -> pickProvider()
+                    1 -> {
+                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        Toast.makeText(this, "Найди «Барсик» в списке и включи", Toast.LENGTH_LONG).show()
+                    }
+                    2 -> {
+                        Brain.clearHistory(this)
+                        while (history.length() > 0) history.remove(0)
+                        msgs.removeAllViews()
+                        addBubble("Память очищена. Мяу!", false)
+                    }
                 }
-            )
+            }
+            .setNegativeButton("Закрыть", null)
+            .show()
+    }
+
+    private val presets = listOf(
+        Triple("Pollinations (без ключа)", Brain.DEFAULT_URL, Brain.DEFAULT_MODEL),
+        Triple("Mistral", "https://api.mistral.ai/v1/chat/completions", "mistral-small-latest"),
+        Triple("Groq", "https://api.groq.com/openai/v1/chat/completions", "llama-3.3-70b-versatile"),
+        Triple("DeepSeek", "https://api.deepseek.com/chat/completions", "deepseek-chat"),
+        Triple("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", "openrouter/free"),
+        Triple("Свой вариант", "", "")
+    )
+
+    private fun pickProvider() {
+        AlertDialog.Builder(this)
+            .setTitle("Какой ИИ использовать?")
+            .setItems(presets.map { it.first }.toTypedArray()) { _, i ->
+                val p = presets[i]
+                showSettings(
+                    p.second.ifEmpty { Brain.aiUrl(this) },
+                    p.third.ifEmpty { Brain.aiModel(this) }
+                )
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private fun showSettings(url: String, model: String) {
+        fun field(h: String, v: String) = EditText(this).apply {
+            hint = h; setText(v); setSingleLine(true)
         }
-        return JSONObject(raw).getJSONArray("choices").getJSONObject(0)
-            .getJSONObject("message").optString("content")
-    }
-
-    // Модель может вернуть JSON в обёртке или просто текст — разбираем оба случая
-    private fun parseReply(t: String): JSONObject {
-        val s = t.indexOf('{')
-        val e = t.lastIndexOf('}')
-        if (s >= 0 && e > s) {
-            try { return JSONObject(t.substring(s, e + 1)) } catch (_: Exception) {}
+        val fUrl = field("Адрес API", url)
+        val fModel = field("Модель", model)
+        val fKey = field("Ключ (если нужен)", Brain.prefs(this).getString("key", "") ?: "")
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(8), dp(24), 0)
+            addView(fUrl); addView(fModel); addView(fKey)
         }
-        return JSONObject().put("reply", t.trim().ifEmpty { "Мяу?" })
-    }
-
-    // ---------- Действия ----------
-
-    private fun handle(res: JSONObject) {
-        addBubble(res.optString("reply", "Мяу!"), false)
-        val acts = res.optJSONArray("actions") ?: return
-        for (n in 0 until acts.length()) {
-            val a = acts.getJSONObject(n)
-            try { run(a.optString("type"), a.optString("arg")) }
-            catch (e: Exception) { addBubble("Не получилось выполнить: ${a.optString("type")}", false) }
-        }
-    }
-
-    private fun run(type: String, arg: String) {
-        when (type) {
-            "search" -> openUri("https://www.google.com/search?q=" + URLEncoder.encode(arg, "UTF-8"))
-            "open_url" -> openUri(arg)
-            "open_app" -> openApp(arg)
-            "media_pause" -> mediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE)
-            "media_stop" -> mediaKey(KeyEvent.KEYCODE_MEDIA_STOP)
-            "media_play" -> mediaKey(KeyEvent.KEYCODE_MEDIA_PLAY)
-            "media_next" -> mediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
-            "media_prev" -> mediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
-            "volume_up" -> volume(AudioManager.ADJUST_RAISE)
-            "volume_down" -> volume(AudioManager.ADJUST_LOWER)
-            "timer" -> startActivity(Intent(AlarmClock.ACTION_SET_TIMER)
-                .putExtra(AlarmClock.EXTRA_LENGTH, arg.toDoubleOrNull()?.toInt() ?: 60)
-                .putExtra(AlarmClock.EXTRA_SKIP_UI, true))
-        }
-    }
-
-    private fun openUri(u: String) = startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u)))
-
-    private fun openApp(name: String) {
-        val apps = installedApps()
-        val hit = apps.firstOrNull { it.first.equals(name, true) }
-            ?: apps.firstOrNull { it.first.contains(name, true) }
-            ?: throw RuntimeException("нет приложения")
-        startActivity(packageManager.getLaunchIntentForPackage(hit.second)!!)
-    }
-
-    private fun mediaKey(code: Int) {
-        val am = getSystemService(AUDIO_SERVICE) as AudioManager
-        am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
-        am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
-    }
-
-    private fun volume(dir: Int) {
-        val am = getSystemService(AUDIO_SERVICE) as AudioManager
-        am.adjustStreamVolume(AudioManager.STREAM_MUSIC, dir, AudioManager.FLAG_SHOW_UI)
+        AlertDialog.Builder(this)
+            .setTitle("Настройки ИИ")
+            .setView(box)
+            .setPositiveButton("Сохранить") { _, _ ->
+                Brain.prefs(this).edit()
+                    .putString("url", fUrl.text.toString().trim())
+                    .putString("model", fModel.text.toString().trim())
+                    .putString("key", fKey.text.toString().trim())
+                    .apply()
+                Toast.makeText(this, "Сохранено", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
     }
 }
