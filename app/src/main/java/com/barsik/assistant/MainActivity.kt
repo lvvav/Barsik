@@ -137,7 +137,6 @@ class MainActivity : AppCompatActivity() {
             )
         }, 500)
 
-        if (apiKey().isBlank()) askKey()
     }
 
     // ---------- Анимации и пузыри ----------
@@ -216,17 +215,52 @@ class MainActivity : AppCompatActivity() {
         return if (saved.isNotBlank()) saved else BuildConfig.AI_KEY
     }
 
+    private val presets = listOf(
+        Triple("Pollinations (без ключа)", "https://text.pollinations.ai/openai", "openai"),
+        Triple("Mistral", "https://api.mistral.ai/v1/chat/completions", "mistral-small-latest"),
+        Triple("Groq", "https://api.groq.com/openai/v1/chat/completions", "llama-3.3-70b-versatile"),
+        Triple("DeepSeek", "https://api.deepseek.com/chat/completions", "deepseek-chat"),
+        Triple("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", "openrouter/free"),
+        Triple("Свой вариант", "", "")
+    )
+
+    // Сначала выбор сервиса, потом поля адреса, модели и ключа
     private fun askKey() {
-        val et = EditText(this).apply {
-            hint = "Ключ OpenRouter (sk-or-...)"
-            setText(prefs.getString("key", ""))
+        AlertDialog.Builder(this)
+            .setTitle("Какой ИИ использовать?")
+            .setItems(presets.map { it.first }.toTypedArray()) { _, i ->
+                val p = presets[i]
+                showSettings(
+                    if (p.second.isEmpty()) aiUrl() else p.second,
+                    if (p.third.isEmpty()) aiModel() else p.third
+                )
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
+    private fun showSettings(url: String, model: String) {
+        fun field(h: String, v: String) = EditText(this).apply {
+            hint = h; setText(v); setSingleLine(true)
+        }
+        val fUrl = field("Адрес API", url)
+        val fModel = field("Модель", model)
+        val fKey = field("Ключ (если нужен)", prefs.getString("key", "") ?: "")
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(8), dp(24), 0)
+            addView(fUrl); addView(fModel); addView(fKey)
         }
         AlertDialog.Builder(this)
-            .setTitle("Ключ OpenRouter (бесплатный)")
-            .setMessage("Получи его бесплатно на openrouter.ai/keys и вставь сюда.")
-            .setView(et)
+            .setTitle("Настройки ИИ")
+            .setView(box)
             .setPositiveButton("Сохранить") { _, _ ->
-                prefs.edit().putString("key", et.text.toString().trim()).apply()
+                prefs.edit()
+                    .putString("url", fUrl.text.toString().trim())
+                    .putString("model", fModel.text.toString().trim())
+                    .putString("key", fKey.text.toString().trim())
+                    .apply()
+                Toast.makeText(this, "Сохранено", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Отмена", null)
             .show()
@@ -251,7 +285,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun send(text: String) {
-        if (apiKey().isBlank()) { askKey(); return }
         addBubble(text, true)
         showTyping()
         Thread {
@@ -264,7 +297,7 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    // ---------- Gemini ----------
+    // ---------- ИИ ----------
 
     private fun installedApps(): List<Pair<String, String>> {
         val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
@@ -291,20 +324,16 @@ class MainActivity : AppCompatActivity() {
 """.trimIndent()
     }
 
-    private class ModelError : Exception("модель сейчас недоступна, попробуй позже")
+    private val defaultUrl = "https://text.pollinations.ai/openai"
+    private val defaultModel = "openai"
 
-    private fun model(): String = prefs.getString("model", null) ?: "openrouter/free"
+    private fun aiUrl() = prefs.getString("url", null)?.takeIf { it.isNotBlank() } ?: defaultUrl
+    private fun aiModel() = prefs.getString("model", null)?.takeIf { it.isNotBlank() } ?: defaultModel
 
     private fun askAI(userText: String): JSONObject {
         history.put(JSONObject().put("role", "user").put("content", userText))
         try {
-            val text = try {
-                callAI()
-            } catch (e: ModelError) {
-                // Выбранной модели нет — подбираем любую бесплатную из списка OpenRouter
-                prefs.edit().putString("model", pickFreeModel()).apply()
-                callAI()
-            }
+            val text = callAI()
             history.put(JSONObject().put("role", "assistant").put("content", text))
             while (history.length() > 12) { history.remove(0); history.remove(0) }
             return parseReply(text)
@@ -314,59 +343,39 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Любой сервис с форматом OpenAI (chat/completions)
     private fun callAI(): String {
         val messages = JSONArray().put(
             JSONObject().put("role", "system").put("content", systemPrompt())
         )
         for (i in 0 until history.length()) messages.put(history.getJSONObject(i))
-        val body = JSONObject().put("model", model()).put("messages", messages)
+        val body = JSONObject().put("model", aiModel()).put("messages", messages)
 
-        val c = URL("https://openrouter.ai/api/v1/chat/completions").openConnection() as HttpURLConnection
+        val c = URL(aiUrl()).openConnection() as HttpURLConnection
         c.requestMethod = "POST"
         c.connectTimeout = 15000
         c.readTimeout = 60000
         c.doOutput = true
         c.setRequestProperty("Content-Type", "application/json")
-        c.setRequestProperty("Authorization", "Bearer " + apiKey())
-        c.setRequestProperty("X-Title", "Barsik")
+        if (apiKey().isNotBlank()) c.setRequestProperty("Authorization", "Bearer " + apiKey())
         c.outputStream.use { it.write(body.toString().toByteArray()) }
 
         val code = c.responseCode
         val stream = if (code in 200..299) c.inputStream else c.errorStream
-        val raw = stream.bufferedReader().use { it.readText() }
+        val raw = stream?.bufferedReader()?.use { it.readText() } ?: ""
         if (code !in 200..299) {
-            if (code == 400 || code == 404) throw ModelError()
             throw RuntimeException(
                 when (code) {
-                    401 -> "ключ не подошёл (нажми 🔑)"
-                    402 -> "на OpenRouter нужны кредиты"
-                    429 -> "лимит бесплатных запросов, подожди минуту"
+                    401, 403 -> "ключ не подошёл (нажми 🔑)"
+                    400, 404 -> "адрес или модель не подошли (нажми 🔑)"
+                    402 -> "на сервисе нужны кредиты"
+                    429 -> "лимит запросов, подожди минуту"
                     else -> "HTTP $code"
                 }
             )
         }
-        val j = JSONObject(raw)
-        if (j.has("error")) throw ModelError()
-        return j.getJSONArray("choices").getJSONObject(0)
+        return JSONObject(raw).getJSONArray("choices").getJSONObject(0)
             .getJSONObject("message").optString("content")
-    }
-
-    private fun pickFreeModel(): String {
-        val c = URL("https://openrouter.ai/api/v1/models").openConnection() as HttpURLConnection
-        c.connectTimeout = 15000
-        c.readTimeout = 30000
-        val data = JSONObject(c.inputStream.bufferedReader().use { it.readText() }).getJSONArray("data")
-        val free = mutableListOf<String>()
-        for (i in 0 until data.length()) {
-            val id = data.getJSONObject(i).optString("id")
-            if (id.endsWith(":free")) free.add(id)
-        }
-        val prefer = listOf("llama-3.3", "qwen", "gemma", "mistral", "deepseek", "gpt-oss", "glm", "kimi")
-        for (p in prefer) {
-            free.firstOrNull { it.contains(p, true) && !it.contains("vl") && !it.contains("coder") }
-                ?.let { return it }
-        }
-        return free.firstOrNull() ?: throw RuntimeException("нет бесплатных моделей")
     }
 
     // Модель может вернуть JSON в обёртке или просто текст — разбираем оба случая
