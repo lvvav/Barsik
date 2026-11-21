@@ -32,10 +32,10 @@ object Brain {
     private val embeddedOpenRouter get() = BuildConfig.AI_KEY.isNotBlank()
 
     fun aiUrl(ctx: Context) = prefs(ctx).getString("url", null)?.takeIf { it.isNotBlank() }
-        ?: if (embeddedOpenRouter) "https://openrouter.ai/api/v1/chat/completions" else DEFAULT_URL
+        ?: if (embeddedOpenRouter) BuildConfig.AI_URL else DEFAULT_URL
 
     fun aiModel(ctx: Context) = prefs(ctx).getString("model", null)?.takeIf { it.isNotBlank() }
-        ?: if (embeddedOpenRouter) "openrouter/free" else DEFAULT_MODEL
+        ?: if (embeddedOpenRouter) BuildConfig.AI_MODEL else DEFAULT_MODEL
 
     // ---------- память (сохраняется между запусками) ----------
 
