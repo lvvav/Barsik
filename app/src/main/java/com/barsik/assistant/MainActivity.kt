@@ -234,23 +234,20 @@ class MainActivity : AppCompatActivity() {
         val ruOk = ModelService.installed(filesDir, "ru")
         val enOk = ModelService.installed(filesDir, "en")
         val cur = Brain.prefs(this).getString("lang", "ru")
-        AlertDialog.Builder(this)
-            .setTitle("Голосовое дополнение (сейчас: ${if (cur == "en") "English" else "русский"})")
-            .setItems(arrayOf(
-                if (ruOk) "Русский: скачан, скачать заново" else "Скачать русский",
-                if (enOk) "English: скачан, скачать заново" else "Скачать English",
-                "Слушать на русском",
-                "Слушать на английском"
-            )) { _, i ->
-                when (i) {
-                    0 -> startDownload("ru")
-                    1 -> startDownload("en")
-                    2 -> if (ruOk) setLang("ru") else Toast.makeText(this, "Сначала скачай русский", Toast.LENGTH_SHORT).show()
-                    3 -> if (enOk) setLang("en") else Toast.makeText(this, "Сначала скачай English", Toast.LENGTH_SHORT).show()
-                }
+        Glass.show(this, "Голосовое дополнение", listOf(
+            Glass.Row("🇷🇺", 0xFF2D9CDB.toInt(), if (ruOk) "Русский — скачан" else "Скачать русский",
+                if (ruOk) "Нажми, чтобы скачать заново" else "Нажми, чтобы скачать") { startDownload("ru") },
+            Glass.Row("🇬🇧", 0xFF5B8DEF.toInt(), if (enOk) "English — скачан" else "Скачать English",
+                if (enOk) "Нажми, чтобы скачать заново" else "Нажми, чтобы скачать") { startDownload("en") },
+            Glass.Row("🗣", 0xFF34C38F.toInt(), "Слушать на русском",
+                if (cur != "en") "Выбрано" else null) {
+                if (ruOk) setLang("ru") else Toast.makeText(this, "Сначала скачай русский", Toast.LENGTH_SHORT).show()
+            },
+            Glass.Row("💬", 0xFFBB6BD9.toInt(), "Слушать на английском",
+                if (cur == "en") "Выбрано" else null) {
+                if (enOk) setLang("en") else Toast.makeText(this, "Сначала скачай English", Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton("Закрыть", null)
-            .show()
+        ))
     }
 
     private fun setLang(l: String) {
@@ -392,77 +389,63 @@ class MainActivity : AppCompatActivity() {
     // ---------- меню и настройки ----------
 
     private fun showMenu() {
-        AlertDialog.Builder(this)
-            .setTitle("Барсик")
-            .setItems(arrayOf(
-                "Сервис ИИ и ключ",
-                "Включить управление экраном",
-                if (WakeService.running) "Выключить слушание «Барсик»" else "Слушать «Барсик» в фоне",
-                "Голос и стиль",
-                "Очистить память",
-                if (Brain.prefs(this).getBoolean("pill_on", true)) "Скрыть Барсика с экрана" else "Показать Барсика на экране",
-                "Голосовое дополнение",
-                "Проверить обновления"
-            )) { _, i ->
-                when (i) {
-                    0 -> pickProvider()
-                    2 -> {
-                        if (WakeService.running) {
-                            stopService(Intent(this, WakeService::class.java))
-                            Toast.makeText(this, "Слушание выключено", Toast.LENGTH_SHORT).show()
-                        } else {
-                            startForegroundService(Intent(this, WakeService::class.java))
-                            Toast.makeText(this, "Скажи «Барсик» — я услышу. Первый запуск распаковывает речевую модель", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                    1 -> {
-                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                        Toast.makeText(this, "Найди «Барсик» в списке и включи", Toast.LENGTH_LONG).show()
-                    }
-                    3 -> showVoiceSettings()
-                    5 -> toggleOverlay()
-                    6 -> showVoicePack()
-                    7 -> checkUpdate(true)
-                    4 -> {
-                        Brain.clearHistory(this)
-                        while (history.length() > 0) history.remove(0)
-                        msgs.removeAllViews()
-                        addBubble("Память очищена. Мяу!", false)
-                    }
+        val pillOn = Brain.prefs(this).getBoolean("pill_on", true)
+        Glass.show(this, "Барсик", listOf(
+            Glass.Row("🔑", 0xFF5B8DEF.toInt(), "Сервис ИИ и ключ", "Выбрать нейросеть") { pickProvider() },
+            Glass.Row("👆", 0xFF34C38F.toInt(), "Управление экраном", "Включить в специальных возможностях") {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                Toast.makeText(this, "Найди «Барсик» в списке и включи", Toast.LENGTH_LONG).show()
+            },
+            Glass.Row("👂", 0xFFF2994A.toInt(), "Слушать «Барсик»",
+                if (WakeService.running) "Сейчас включено" else "Выключено") {
+                if (WakeService.running) {
+                    stopService(Intent(this, WakeService::class.java))
+                    Toast.makeText(this, "Слушание выключено", Toast.LENGTH_SHORT).show()
+                } else {
+                    startForegroundService(Intent(this, WakeService::class.java))
+                    Toast.makeText(this, "Скажи «Барсик» — я услышу", Toast.LENGTH_LONG).show()
                 }
-            }
-            .setNegativeButton("Закрыть", null)
-            .show()
+            },
+            Glass.Row("🎙", 0xFFBB6BD9.toInt(), "Голос и стиль", "Стиль, озвучка, скорость") { showVoiceSettings() },
+            Glass.Row("📦", 0xFF2D9CDB.toInt(), "Голосовое дополнение", "Языки распознавания речи") { showVoicePack() },
+            Glass.Row("🐾", 0xFFEB5757.toInt(), if (pillOn) "Скрыть Барсика" else "Показать Барсика",
+                "Плавающая кнопка на экране") { toggleOverlay() },
+            Glass.Row("🧹", 0xFFD4A017.toInt(), "Очистить память", "Забыть прошлый разговор") {
+                Brain.clearHistory(this)
+                while (history.length() > 0) history.remove(0)
+                msgs.removeAllViews()
+                addBubble("Память очищена. Мяу!", false)
+            },
+            Glass.Row("🔄", 0xFF27AE60.toInt(), "Проверить обновления", "Скачать новую версию") { checkUpdate(true) }
+        ))
     }
 
     private fun showVoiceSettings() {
         val p = Brain.prefs(this)
         val speeds = arrayOf("Медленно" to 0.85f, "Норма" to 1.0f, "Быстро" to 1.2f)
-        AlertDialog.Builder(this)
-            .setTitle("Голос и стиль")
-            .setItems(arrayOf(
-                "Стиль: " + (if (Brain.persona(this) == "jarvis") "Джарвис (сменить на кота)" else "Кот-пацан (сменить на Джарвиса)"),
-                "Озвучка ответов: " + (if (p.getBoolean("voice_on", true)) "вкл (выключить)" else "выкл (включить)"),
-                "Скорость: " + speeds.first { it.second == p.getFloat("speed", 1.0f) }.first,
-                "Скорость: медленно / норма / быстро"
-            )) { _, i ->
-                when (i) {
-                    0 -> p.edit().putString("persona", if (Brain.persona(this) == "jarvis") "cat" else "jarvis").apply()
-                    1 -> p.edit().putBoolean("voice_on", !p.getBoolean("voice_on", true)).apply()
-                    2, 3 -> {
-                        AlertDialog.Builder(this)
-                            .setTitle("Скорость голоса")
-                            .setItems(speeds.map { it.first }.toTypedArray()) { _, j ->
-                                p.edit().putFloat("speed", speeds[j].second).apply()
-                            }
-                            .show()
-                    }
-                }
+        val jarvis = Brain.persona(this) == "jarvis"
+        val voiceOn = p.getBoolean("voice_on", true)
+        val speedName = speeds.firstOrNull { it.second == p.getFloat("speed", 1.0f) }?.first ?: "Норма"
+        Glass.show(this, "Голос и стиль", listOf(
+            Glass.Row("🎭", 0xFFBB6BD9.toInt(), "Стиль", if (jarvis) "Джарвис" else "Кот-пацан") {
+                p.edit().putString("persona", if (jarvis) "cat" else "jarvis").apply()
                 BarsikService.instance?.applyVoiceSettings()
-                if (i == 0) Toast.makeText(this, "Стиль изменён", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Стиль изменён", Toast.LENGTH_SHORT).show()
+            },
+            Glass.Row("🔊", 0xFF34C38F.toInt(), "Озвучка ответов", if (voiceOn) "Включена" else "Выключена") {
+                p.edit().putBoolean("voice_on", !voiceOn).apply()
+                BarsikService.instance?.applyVoiceSettings()
+            },
+            Glass.Row("⏩", 0xFFF2994A.toInt(), "Скорость голоса", speedName) {
+                Glass.show(this, "Скорость голоса", speeds.map { s ->
+                    Glass.Row(if (s.second < 1f) "🐢" else if (s.second > 1f) "🐇" else "⚖️",
+                        0xFFF2994A.toInt(), s.first, null) {
+                        p.edit().putFloat("speed", s.second).apply()
+                        BarsikService.instance?.applyVoiceSettings()
+                    }
+                })
             }
-            .setNegativeButton("Закрыть", null)
-            .show()
+        ))
     }
 
     private fun toggleOverlay() {
@@ -488,17 +471,16 @@ class MainActivity : AppCompatActivity() {
     )
 
     private fun pickProvider() {
-        AlertDialog.Builder(this)
-            .setTitle("Какой ИИ использовать?")
-            .setItems(presets.map { it.first }.toTypedArray()) { _, i ->
-                val p = presets[i]
+        val icons = listOf("🆓", "🇫🇷", "⚡", "🔍", "🌐", "🇷🇺", "✏️")
+        val colors = listOf(0xFF27AE60, 0xFF5B8DEF, 0xFFF2994A, 0xFF2D9CDB, 0xFFBB6BD9, 0xFFEB5757, 0xFF8E8E9A)
+        Glass.show(this, "Какой ИИ использовать?", presets.mapIndexed { i, p ->
+            Glass.Row(icons[i], colors[i].toInt(), p.first, null) {
                 showSettings(
                     p.second.ifEmpty { Brain.aiUrl(this) },
                     p.third.ifEmpty { Brain.aiModel(this) }
                 )
             }
-            .setNegativeButton("Отмена", null)
-            .show()
+        })
     }
 
     private fun showSettings(url: String, model: String) {
