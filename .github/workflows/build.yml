@@ -30,6 +30,12 @@ jobs:
           unzip -q model.zip -d app/src/main/assets
           mv app/src/main/assets/vosk-model-small-ru-0.22 app/src/main/assets/model
 
+      - name: Fetch Russian Ministry of Digital Development CA certificates (for GigaChat)
+        run: |
+          mkdir -p app/src/main/res/raw
+          curl -fL -o app/src/main/res/raw/rus_root_ca.crt https://gu-st.ru/content/lending/russian_trusted_root_ca_pem.crt
+          curl -fL -o app/src/main/res/raw/rus_sub_ca.crt https://gu-st.ru/content/lending/russian_trusted_sub_ca_pem.crt
+
       - name: Build debug APK
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

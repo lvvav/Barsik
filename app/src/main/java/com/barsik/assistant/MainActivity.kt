@@ -350,6 +350,7 @@ class MainActivity : AppCompatActivity() {
         Triple("Groq", "https://api.groq.com/openai/v1/chat/completions", "llama-3.3-70b-versatile"),
         Triple("DeepSeek", "https://api.deepseek.com/chat/completions", "deepseek-chat"),
         Triple("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", "openrouter/free"),
+        Triple("GigaChat (Сбер, из России без VPN)", "gigachat", "GigaChat"),
         Triple("Свой вариант", "", "")
     )
 

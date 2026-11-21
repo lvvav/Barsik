@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Доверяем корневым сертификатам Минцифры: без них Android не подключится к GigaChat -->
+<network-security-config>
+    <base-config>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/rus_root_ca" />
+            <certificates src="@raw/rus_sub_ca" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

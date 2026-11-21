@@ -66,7 +66,59 @@ object Brain {
     }
 
     // Один запрос к сервису в формате OpenAI (chat/completions)
+    private fun readBody(c: HttpURLConnection): String {
+        val s = if (c.responseCode in 200..299) c.inputStream else c.errorStream
+        return s?.bufferedReader()?.use { it.readText() } ?: ""
+    }
+
+    // ---------- GigaChat (Сбер): токен живёт 30 минут, кэшируем его ----------
+
+    private var gigaToken: String? = null
+    private var gigaExpires = 0L
+
+    private fun gigaAccessToken(ctx: Context): String {
+        val now = System.currentTimeMillis()
+        val cached = gigaToken
+        if (cached != null && now < gigaExpires - 60_000) return cached
+        val c = URL("https://ngw.devices.sberbank.ru:9443/api/v2/oauth").openConnection() as HttpURLConnection
+        c.requestMethod = "POST"
+        c.connectTimeout = 15000
+        c.readTimeout = 30000
+        c.doOutput = true
+        c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+        c.setRequestProperty("Accept", "application/json")
+        c.setRequestProperty("RqUID", java.util.UUID.randomUUID().toString())
+        c.setRequestProperty("Authorization", "Basic " + apiKey(ctx))
+        c.outputStream.use { it.write("scope=GIGACHAT_API_PERS".toByteArray()) }
+        val code = c.responseCode
+        val raw = readBody(c)
+        if (code !in 200..299) throw RuntimeException("GigaChat: ключ не подошёл (нажми 🔑)")
+        val j = JSONObject(raw)
+        gigaToken = j.getString("access_token")
+        gigaExpires = j.optLong("expires_at", now + 25 * 60_000)
+        return gigaToken!!
+    }
+
+    private fun gigaPost(ctx: Context, messages: JSONArray): String {
+        val token = gigaAccessToken(ctx)
+        val body = JSONObject().put("model", "GigaChat").put("messages", messages)
+        val c = URL("https://gigachat.devices.sberbank.ru/api/v1/chat/completions").openConnection() as HttpURLConnection
+        c.requestMethod = "POST"
+        c.connectTimeout = 15000
+        c.readTimeout = 60000
+        c.doOutput = true
+        c.setRequestProperty("Content-Type", "application/json")
+        c.setRequestProperty("Authorization", "Bearer $token")
+        c.outputStream.use { it.write(body.toString().toByteArray()) }
+        val code = c.responseCode
+        val raw = readBody(c)
+        if (code !in 200..299) throw RuntimeException(if (code == 401) "токен не принят, попробуй ещё раз" else "GigaChat HTTP $code")
+        return JSONObject(raw).getJSONArray("choices").getJSONObject(0)
+            .getJSONObject("message").optString("content")
+    }
+
     fun post(ctx: Context, messages: JSONArray): String {
+        if (aiUrl(ctx) == "gigachat") return gigaPost(ctx, messages)
         val body = JSONObject().put("model", aiModel(ctx)).put("messages", messages)
         val c = URL(aiUrl(ctx)).openConnection() as HttpURLConnection
         c.requestMethod = "POST"
