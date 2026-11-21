@@ -230,7 +230,7 @@ class BarsikService : AccessibilityService() {
         }
         r.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Brain.voiceLocale(this@BarsikService))
         })
         say("Слушаю…")
     }

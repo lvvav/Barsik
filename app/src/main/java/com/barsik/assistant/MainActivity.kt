@@ -30,7 +30,16 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.widget.FrameLayout
 import org.json.JSONArray
+import java.net.HttpURLConnection
+import java.net.URL
+
+private const val APK_URL = "https://github.com/lvvav/Barsik/releases/download/latest/Barsik.apk"
+private const val VERSION_URL = "https://github.com/lvvav/Barsik/releases/download/latest/version.txt"
 
 class MainActivity : AppCompatActivity() {
 
@@ -45,6 +54,31 @@ class MainActivity : AppCompatActivity() {
     private var typingView: View? = null
     private var typingAnim: ObjectAnimator? = null
     private var history = JSONArray()
+    private lateinit var dlBar: FrameLayout
+    private lateinit var dlFill: View
+    private lateinit var dlText: TextView
+    private val ui = Handler(Looper.getMainLooper())
+
+    // Обновляет полосу загрузки голоса, пока ModelService качает файлы
+    private val tick = object : Runnable {
+        override fun run() {
+            dlBar.visibility = View.VISIBLE
+            val w = dlBar.width
+            dlFill.layoutParams = FrameLayout.LayoutParams(w * ModelService.percent / 100, FrameLayout.LayoutParams.MATCH_PARENT)
+            dlText.text = ModelService.status
+            if (ModelService.active) {
+                ui.postDelayed(this, 300)
+            } else {
+                // Загрузка закончилась: показываем итог и прячем полосу
+                ui.postDelayed({ dlBar.visibility = View.GONE }, 2500)
+            }
+        }
+    }
+
+    private fun startTick() {
+        ui.removeCallbacks(tick)
+        ui.post(tick)
+    }
 
     private val voice = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val text = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
@@ -77,6 +111,10 @@ class MainActivity : AppCompatActivity() {
         scroll = findViewById(R.id.scroll)
         input = findViewById(R.id.input)
         status = findViewById(R.id.status)
+        dlBar = findViewById(R.id.dlBar)
+        dlFill = findViewById(R.id.dlFill)
+        dlText = findViewById(R.id.dlText)
+        Ui.apply(findViewById(R.id.content), Ui.font(this))
 
         val sendBtn = findViewById<View>(R.id.sendBtn)
         val micBtn = findViewById<View>(R.id.micBtn)
@@ -153,6 +191,82 @@ class MainActivity : AppCompatActivity() {
         ) micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
 
+    override fun onStart() {
+        super.onStart()
+        // Проверяем версию при каждом открытии приложения
+        checkUpdate(false)
+        if (ModelService.active) startTick()
+    }
+
+    // ---------- обновления и голосовое дополнение ----------
+
+    private fun checkUpdate(manual: Boolean) {
+        Thread {
+            try {
+                val c = URL(VERSION_URL).openConnection() as HttpURLConnection
+                c.connectTimeout = 10000
+                c.readTimeout = 10000
+                val latest = c.inputStream.bufferedReader().use { it.readText().trim().toIntOrNull() ?: 0 }
+                c.disconnect()
+                runOnUiThread {
+                    if (latest > BuildConfig.VERSION_CODE) {
+                        AlertDialog.Builder(this)
+                            .setTitle("Есть обновление")
+                            .setMessage("Вышла новая версия Барсика. Скачать и установить?")
+                            .setPositiveButton("Обновить") { _, _ ->
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(APK_URL)))
+                            }
+                            .setNegativeButton("Позже", null)
+                            .show()
+                    } else if (manual) {
+                        Toast.makeText(this, "У тебя последняя версия", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                if (manual) runOnUiThread {
+                    Toast.makeText(this, "Не удалось проверить обновление", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun showVoicePack() {
+        val ruOk = ModelService.installed(filesDir, "ru")
+        val enOk = ModelService.installed(filesDir, "en")
+        val cur = Brain.prefs(this).getString("lang", "ru")
+        AlertDialog.Builder(this)
+            .setTitle("Голосовое дополнение (сейчас: ${if (cur == "en") "English" else "русский"})")
+            .setItems(arrayOf(
+                if (ruOk) "Русский: скачан, скачать заново" else "Скачать русский",
+                if (enOk) "English: скачан, скачать заново" else "Скачать English",
+                "Слушать на русском",
+                "Слушать на английском"
+            )) { _, i ->
+                when (i) {
+                    0 -> startDownload("ru")
+                    1 -> startDownload("en")
+                    2 -> if (ruOk) setLang("ru") else Toast.makeText(this, "Сначала скачай русский", Toast.LENGTH_SHORT).show()
+                    3 -> if (enOk) setLang("en") else Toast.makeText(this, "Сначала скачай English", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Закрыть", null)
+            .show()
+    }
+
+    private fun setLang(l: String) {
+        Brain.prefs(this).edit().putString("lang", l).apply()
+        Toast.makeText(this, "Язык голоса изменён. Перезапусти слушание «Барсик»", Toast.LENGTH_LONG).show()
+    }
+
+    private fun startDownload(l: String) {
+        if (ModelService.active) {
+            Toast.makeText(this, "Загрузка уже идёт", Toast.LENGTH_SHORT).show()
+        } else {
+            ContextCompat.startForegroundService(this, Intent(this, ModelService::class.java).putExtra("lang", l))
+        }
+        startTick()
+    }
+
     // ---------- анимации и пузыри ----------
 
     private fun View.pressable() {
@@ -178,6 +292,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(dp(16), dp(10), dp(16), dp(10))
             setBackgroundResource(if (user) R.drawable.bg_bubble_user else R.drawable.bg_bubble_bot)
             maxWidth = (resources.displayMetrics.widthPixels * 0.78).toInt()
+            typeface = Ui.font(this@MainActivity)
         }
         val lp = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
@@ -223,7 +338,7 @@ class MainActivity : AppCompatActivity() {
     private fun listen() {
         val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Brain.voiceLocale(this@MainActivity))
             putExtra(RecognizerIntent.EXTRA_PROMPT, "Говори с Барсиком")
         }
         try { voice.launch(i) } catch (e: Exception) {
@@ -285,7 +400,9 @@ class MainActivity : AppCompatActivity() {
                 if (WakeService.running) "Выключить слушание «Барсик»" else "Слушать «Барсик» в фоне",
                 "Голос и стиль",
                 "Очистить память",
-                if (Brain.prefs(this).getBoolean("pill_on", true)) "Скрыть Барсика с экрана" else "Показать Барсика на экране"
+                if (Brain.prefs(this).getBoolean("pill_on", true)) "Скрыть Барсика с экрана" else "Показать Барсика на экране",
+                "Голосовое дополнение",
+                "Проверить обновления"
             )) { _, i ->
                 when (i) {
                     0 -> pickProvider()
@@ -304,6 +421,8 @@ class MainActivity : AppCompatActivity() {
                     }
                     3 -> showVoiceSettings()
                     5 -> toggleOverlay()
+                    6 -> showVoicePack()
+                    7 -> checkUpdate(true)
                     4 -> {
                         Brain.clearHistory(this)
                         while (history.length() > 0) history.remove(0)

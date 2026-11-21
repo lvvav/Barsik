@@ -136,6 +136,31 @@
             </LinearLayout>
         </HorizontalScrollView>
 
+        <FrameLayout
+            android:id="@+id/dlBar"
+            android:layout_width="match_parent"
+            android:layout_height="34dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_glass_pill"
+            android:clipToOutline="true"
+            android:visibility="gone">
+
+            <View
+                android:id="@+id/dlFill"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:background="#66FFFFFF" />
+
+            <TextView
+                android:id="@+id/dlText"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="0%"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
+        </FrameLayout>
+
         <LinearLayout
             android:id="@+id/inputBar"
             android:layout_width="match_parent"

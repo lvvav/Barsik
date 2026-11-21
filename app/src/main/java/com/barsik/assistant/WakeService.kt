@@ -17,8 +17,7 @@ import android.widget.Toast
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
-import org.vosk.android.StorageService
-import java.io.IOException
+import java.io.File
 
 // Фоновое прослушивание слова «Барсик» офлайн (движок Vosk, модель русского языка)
 class WakeService : Service() {
@@ -56,11 +55,23 @@ class WakeService : Service() {
             startForeground(1, n)
         }
         if (!alive) {
+            val lang = Brain.prefs(this).getString("lang", "ru") ?: "ru"
+            // Модель скачивается в меню «Голосовое дополнение», здесь её только загружаем
+            if (!ModelService.installed(filesDir, lang)) {
+                toast("Сначала скачай голосовое дополнение в меню 🔑")
+                stopSelf()
+                return START_NOT_STICKY
+            }
             alive = true
-            // Модель распаковывается из assets один раз, потом берётся из памяти приложения
-            StorageService.unpack(this, "model", "model",
-                { m: Model -> model = m; startListening() },
-                { _: IOException -> toast("Не загрузилась речевая модель"); stopSelf() })
+            Thread {
+                try {
+                    model = Model(File(filesDir, "models/$lang").absolutePath)
+                    startListening()
+                } catch (e: Exception) {
+                    toast("Не загрузилась речевая модель")
+                    main.post { stopSelf() }
+                }
+            }.start()
         }
         return START_STICKY
     }
@@ -100,9 +111,12 @@ class WakeService : Service() {
             return
         }
 
-        val idx = text.indexOf("барсик", ignoreCase = true)
-        if (idx < 0) return
-        val cmd = text.substring(idx + "барсик".length).trim(' ', ',', '.', '!', '?')
+        // Слово-пробуждение: «Барсик» по-русски и «barsik» по-английски
+        val (idx, word) = listOf("барсик", "barsik")
+            .map { w -> text.indexOf(w, ignoreCase = true) to w }
+            .filter { it.first >= 0 }
+            .minByOrNull { it.first } ?: return
+        val cmd = text.substring(idx + word.length).trim(' ', ',', '.', '!', '?')
         if (cmd.isBlank()) {
             awaiting = true
             awaitingSince = now

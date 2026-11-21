@@ -20,6 +20,9 @@ object Brain {
 
     fun prefs(ctx: Context) = ctx.getSharedPreferences("barsik", Context.MODE_PRIVATE)
 
+    // Язык распознавания речи, который выбран в меню «Голосовое дополнение»
+    fun voiceLocale(ctx: Context) = if (prefs(ctx).getString("lang", "ru") == "en") "en-US" else "ru-RU"
+
     fun apiKey(ctx: Context): String {
         val saved = prefs(ctx).getString("key", "") ?: ""
         return if (saved.isNotBlank()) saved else BuildConfig.AI_KEY

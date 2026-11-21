@@ -23,12 +23,10 @@ jobs:
         with:
           gradle-version: 8.7
 
-      - name: Fetch offline Russian speech model
+      - name: Fetch Manrope font (optional, app falls back to system font)
         run: |
           mkdir -p app/src/main/assets
-          curl -L -o model.zip https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip
-          unzip -q model.zip -d app/src/main/assets
-          mv app/src/main/assets/vosk-model-small-ru-0.22 app/src/main/assets/model
+          curl -fL -o app/src/main/assets/manrope.ttf https://github.com/googlefonts/manrope/raw/main/fonts/ttf/Manrope-Regular.ttf || echo "font not downloaded"
 
       - name: Fetch Russian Ministry of Digital Development CA certificates (for GigaChat)
         run: |
@@ -49,9 +47,14 @@ jobs:
           name: Barsik-apk
           path: Barsik.apk
 
+      - name: Write version file
+        run: echo "$GITHUB_RUN_NUMBER" > version.txt
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: Barsik (последняя сборка)
-          files: Barsik.apk
+          files: |
+            Barsik.apk
+            version.txt

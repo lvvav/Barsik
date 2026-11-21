@@ -11,8 +11,14 @@ android {
         applicationId = "com.barsik.assistant"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
+        // Номер сборки GitHub Actions: по нему приложение понимает, что вышла новая версия
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "2").toInt()
         versionName = "2.0"
+
+        // Только современные телефоны (arm64): APK заметно легче
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
 
         // Ключ подставляется при сборке из секрета OPENROUTER_API_KEY (в репозитории его нет)
         val key = System.getenv("OPENROUTER_API_KEY") ?: ""
