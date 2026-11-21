@@ -270,6 +270,7 @@ class BarsikService : AccessibilityService() {
             val type = a.optString("type")
             val arg = a.optString("arg")
             if (type == "screen_task") runGoal(arg)
+            else if (type == "music") runGoal(Brain.musicGoal(arg))
             else main.post { Brain.execute(this, type, arg) }
         }
     }

@@ -264,10 +264,10 @@ class MainActivity : AppCompatActivity() {
             val a = arr.getJSONObject(n)
             val type = a.optString("type")
             val arg = a.optString("arg")
-            if (type == "screen_task") {
+            if (type == "screen_task" || type == "music") {
                 val svc = BarsikService.instance
                 if (svc == null) addBubble("Чтобы я управлял экраном, включи меня: 🔑 → «Включить управление экраном».", false)
-                else svc.runGoalAsync(arg)
+                else svc.runGoalAsync(if (type == "music") Brain.musicGoal(arg) else arg)
             } else {
                 Brain.execute(this, type, arg)
             }
