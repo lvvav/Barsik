@@ -13,6 +13,8 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.view.Gravity
+import android.view.MotionEvent
+import kotlin.math.abs
 import android.view.View
 import android.view.ViewOutlineProvider
 import android.view.WindowManager
@@ -80,7 +82,7 @@ class BarsikService : AccessibilityService() {
         if (overlay != null) return
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.END
+            gravity = Gravity.START
         }
         val tv = TextView(this).apply {
             setTextColor(Color.WHITE)
@@ -89,6 +91,13 @@ class BarsikService : AccessibilityService() {
             setBackgroundResource(R.drawable.bg_bubble_bot)
             maxWidth = dp(260)
             visibility = View.GONE
+        }
+        // Таблетка: аватар и имя. Её можно перетаскивать, короткое касание запускает голос
+        val pill = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(6), dp(6), dp(18), dp(6))
+            setBackgroundResource(R.drawable.bg_glass_pill)
         }
         val av = ImageView(this).apply {
             setImageResource(R.drawable.barsik_avatar)
@@ -99,13 +108,24 @@ class BarsikService : AccessibilityService() {
                 }
             }
             clipToOutline = true
-            setOnClickListener { listen() }
         }
+        val name = TextView(this).apply {
+            text = "Барсик"
+            setTextColor(Color.WHITE)
+            textSize = 16f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(dp(10), 0, 0, 0)
+        }
+        pill.addView(av, LinearLayout.LayoutParams(dp(52), dp(52)))
+        pill.addView(name)
         box.addView(tv, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = dp(8) })
-        box.addView(av, LinearLayout.LayoutParams(dp(64), dp(64)))
+        box.addView(pill, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
 
+        val prefs = Brain.prefs(this)
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -113,10 +133,42 @@ class BarsikService : AccessibilityService() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.END or Gravity.BOTTOM
-            x = dp(12)
-            y = dp(140)
+            gravity = Gravity.TOP or Gravity.START
+            x = prefs.getInt("pill_x", resources.displayMetrics.widthPixels - dp(200))
+            y = prefs.getInt("pill_y", dp(300))
         }
+
+        var startX = 0
+        var startY = 0
+        var touchX = 0f
+        var touchY = 0f
+        var moved = false
+        box.setOnTouchListener { _, e ->
+            when (e.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    startX = lp.x; startY = lp.y
+                    touchX = e.rawX; touchY = e.rawY
+                    moved = false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (e.rawX - touchX).toInt()
+                    val dy = (e.rawY - touchY).toInt()
+                    if (abs(dx) > dp(6) || abs(dy) > dp(6)) moved = true
+                    lp.x = (startX + dx).coerceIn(0, resources.displayMetrics.widthPixels - dp(120))
+                    lp.y = (startY + dy).coerceIn(0, resources.displayMetrics.heightPixels - dp(120))
+                    wm().updateViewLayout(box, lp)
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (moved) {
+                        prefs.edit().putInt("pill_x", lp.x).putInt("pill_y", lp.y).apply()
+                    } else {
+                        listen()
+                    }
+                }
+            }
+            true
+        }
+
         wm().addView(box, lp)
         overlay = box
         label = tv
