@@ -169,9 +169,15 @@ class BarsikService : AccessibilityService() {
             true
         }
 
+        box.visibility = if (prefs.getBoolean("pill_on", true)) View.VISIBLE else View.GONE
         wm().addView(box, lp)
         overlay = box
         label = tv
+    }
+
+    // Показать или скрыть таблетку на экране (голосовое слушание при этом работает)
+    fun setPillVisible(on: Boolean) {
+        main.post { overlay?.visibility = if (on) View.VISIBLE else View.GONE }
     }
 
     private fun say(msg: String) {

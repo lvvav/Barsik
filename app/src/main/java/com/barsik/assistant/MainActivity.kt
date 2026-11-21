@@ -284,7 +284,8 @@ class MainActivity : AppCompatActivity() {
                 "Включить управление экраном",
                 if (WakeService.running) "Выключить слушание «Барсик»" else "Слушать «Барсик» в фоне",
                 "Голос и стиль",
-                "Очистить память"
+                "Очистить память",
+                if (Brain.prefs(this).getBoolean("pill_on", true)) "Скрыть Барсика с экрана" else "Показать Барсика на экране"
             )) { _, i ->
                 when (i) {
                     0 -> pickProvider()
@@ -302,6 +303,7 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this, "Найди «Барсик» в списке и включи", Toast.LENGTH_LONG).show()
                     }
                     3 -> showVoiceSettings()
+                    5 -> toggleOverlay()
                     4 -> {
                         Brain.clearHistory(this)
                         while (history.length() > 0) history.remove(0)
@@ -342,6 +344,18 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Закрыть", null)
             .show()
+    }
+
+    private fun toggleOverlay() {
+        val p = Brain.prefs(this)
+        val on = !p.getBoolean("pill_on", true)
+        p.edit().putBoolean("pill_on", on).apply()
+        val svc = BarsikService.instance
+        if (svc != null) {
+            svc.setPillVisible(on)
+        } else {
+            Toast.makeText(this, "Сначала включи управление экраном", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private val presets = listOf(
