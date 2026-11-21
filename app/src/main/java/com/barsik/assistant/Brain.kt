@@ -25,8 +25,14 @@ object Brain {
         return if (saved.isNotBlank()) saved else BuildConfig.AI_KEY
     }
 
-    fun aiUrl(ctx: Context) = prefs(ctx).getString("url", null)?.takeIf { it.isNotBlank() } ?: DEFAULT_URL
-    fun aiModel(ctx: Context) = prefs(ctx).getString("model", null)?.takeIf { it.isNotBlank() } ?: DEFAULT_MODEL
+    // Если ключ OpenRouter вшит в сборку, по умолчанию используем его, иначе бесплатный Pollinations
+    private val embeddedOpenRouter get() = BuildConfig.AI_KEY.isNotBlank()
+
+    fun aiUrl(ctx: Context) = prefs(ctx).getString("url", null)?.takeIf { it.isNotBlank() }
+        ?: if (embeddedOpenRouter) "https://openrouter.ai/api/v1/chat/completions" else DEFAULT_URL
+
+    fun aiModel(ctx: Context) = prefs(ctx).getString("model", null)?.takeIf { it.isNotBlank() }
+        ?: if (embeddedOpenRouter) "openrouter/free" else DEFAULT_MODEL
 
     // ---------- память (сохраняется между запусками) ----------
 
