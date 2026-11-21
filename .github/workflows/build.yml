@@ -23,10 +23,6 @@ jobs:
         with:
           gradle-version: 8.7
 
-      - name: Fetch Manrope font (optional, app falls back to system font)
-        run: |
-          mkdir -p app/src/main/assets
-          curl -fL -o app/src/main/assets/manrope.ttf https://github.com/googlefonts/manrope/raw/main/fonts/ttf/Manrope-Regular.ttf || echo "font not downloaded"
 
       - name: Fetch Russian Ministry of Digital Development CA certificates (for GigaChat)
         run: |
