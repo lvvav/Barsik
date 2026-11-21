@@ -25,25 +25,20 @@ android {
         buildConfigField("String", "AI_KEY", "\"$key\"")
     }
 
-    // Постоянный ключ подписи из секретов GitHub: все сборки подписаны одним ключом,
+    // Постоянный ключ подписи лежит в репозитории (app/signing): все сборки подписаны одним ключом,
     // поэтому обновление ставится поверх уже установленного приложения
     signingConfigs {
         create("ci") {
-            val ks = System.getenv("BARSIK_KEYSTORE")
-            if (ks != null) {
-                storeFile = file(ks)
-                storePassword = System.getenv("BARSIK_KS_PASS")
-                keyAlias = System.getenv("BARSIK_KEY_ALIAS")
-                keyPassword = System.getenv("BARSIK_KEY_PASS")
-            }
+            storeFile = file("signing/barsik.jks")
+            storePassword = "4ae0a2054189a8d79ccf29697ac94b63"
+            keyAlias = "barsik"
+            keyPassword = "4ae0a2054189a8d79ccf29697ac94b63"
         }
     }
 
     buildTypes {
         debug {
-            if (System.getenv("BARSIK_KEYSTORE") != null) {
-                signingConfig = signingConfigs.getByName("ci")
-            }
+            signingConfig = signingConfigs.getByName("ci")
         }
     }
 
