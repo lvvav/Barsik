@@ -85,6 +85,20 @@ class MainActivity : AppCompatActivity() {
         micBtn.setOnClickListener { listen() }
         keyBtn.setOnClickListener { showMenu() }
         listOf(sendBtn, micBtn, keyBtn).forEach { it.pressable() }
+
+        // Быстрые кнопки: отправляют готовую команду
+        mapOf(
+            R.id.chipFlash to "включи фонарик",
+            R.id.chipAlarm to "поставь будильник на 7 утра",
+            R.id.chipMusic to "поставь музыку на паузу",
+            R.id.chipTimer to "поставь таймер на 5 минут",
+            R.id.chipSettings to "открой настройки"
+        ).forEach { (id, cmd) ->
+            findViewById<View>(id).apply {
+                setOnClickListener { send(cmd) }
+                pressable()
+            }
+        }
         input.setOnEditorActionListener { _, id, _ ->
             if (id == EditorInfo.IME_ACTION_SEND) { sendFromInput(); true } else false
         }
@@ -269,6 +283,7 @@ class MainActivity : AppCompatActivity() {
                 "Сервис ИИ и ключ",
                 "Включить управление экраном",
                 if (WakeService.running) "Выключить слушание «Барсик»" else "Слушать «Барсик» в фоне",
+                "Голос и стиль",
                 "Очистить память"
             )) { _, i ->
                 when (i) {
@@ -286,13 +301,44 @@ class MainActivity : AppCompatActivity() {
                         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                         Toast.makeText(this, "Найди «Барсик» в списке и включи", Toast.LENGTH_LONG).show()
                     }
-                    3 -> {
+                    3 -> showVoiceSettings()
+                    4 -> {
                         Brain.clearHistory(this)
                         while (history.length() > 0) history.remove(0)
                         msgs.removeAllViews()
                         addBubble("Память очищена. Мяу!", false)
                     }
                 }
+            }
+            .setNegativeButton("Закрыть", null)
+            .show()
+    }
+
+    private fun showVoiceSettings() {
+        val p = Brain.prefs(this)
+        val speeds = arrayOf("Медленно" to 0.85f, "Норма" to 1.0f, "Быстро" to 1.2f)
+        AlertDialog.Builder(this)
+            .setTitle("Голос и стиль")
+            .setItems(arrayOf(
+                "Стиль: " + (if (Brain.persona(this) == "jarvis") "Джарвис (сменить на кота)" else "Кот-пацан (сменить на Джарвиса)"),
+                "Озвучка ответов: " + (if (p.getBoolean("voice_on", true)) "вкл (выключить)" else "выкл (включить)"),
+                "Скорость: " + speeds.first { it.second == p.getFloat("speed", 1.0f) }.first,
+                "Скорость: медленно / норма / быстро"
+            )) { _, i ->
+                when (i) {
+                    0 -> p.edit().putString("persona", if (Brain.persona(this) == "jarvis") "cat" else "jarvis").apply()
+                    1 -> p.edit().putBoolean("voice_on", !p.getBoolean("voice_on", true)).apply()
+                    2, 3 -> {
+                        AlertDialog.Builder(this)
+                            .setTitle("Скорость голоса")
+                            .setItems(speeds.map { it.first }.toTypedArray()) { _, j ->
+                                p.edit().putFloat("speed", speeds[j].second).apply()
+                            }
+                            .show()
+                    }
+                }
+                BarsikService.instance?.applyVoiceSettings()
+                if (i == 0) Toast.makeText(this, "Стиль изменён", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Закрыть", null)
             .show()

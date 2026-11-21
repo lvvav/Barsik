@@ -58,7 +58,7 @@ class BarsikService : AccessibilityService() {
     override fun onServiceConnected() {
         instance = this
         tts = TextToSpeech(this) { status ->
-            if (status == TextToSpeech.SUCCESS) tts?.language = Locale("ru", "RU")
+            if (status == TextToSpeech.SUCCESS) applyVoiceSettings()
         }
         showOverlay()
     }
@@ -131,7 +131,17 @@ class BarsikService : AccessibilityService() {
             main.removeCallbacks(hideLabel)
             main.postDelayed(hideLabel, 6000)
         }
-        tts?.speak(msg, TextToSpeech.QUEUE_ADD, null, "barsik")
+        if (Brain.prefs(this).getBoolean("voice_on", true)) {
+            tts?.speak(msg, TextToSpeech.QUEUE_ADD, null, "barsik")
+        }
+    }
+
+    // Язык, скорость и тон озвучки из настроек
+    fun applyVoiceSettings() {
+        val p = Brain.prefs(this)
+        tts?.language = Locale("ru", "RU")
+        tts?.setSpeechRate(p.getFloat("speed", 1.0f))
+        tts?.setPitch(if (Brain.persona(this) == "jarvis") 0.85f else 1.1f)
     }
 
     // ---------- голос ----------

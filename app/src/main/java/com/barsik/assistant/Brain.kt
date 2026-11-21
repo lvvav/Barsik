@@ -99,10 +99,17 @@ object Brain {
         return JSONObject().put("reply", t.trim().ifEmpty { "Мяу?" })
     }
 
+    // Стиль ответов: "cat" (Кот-пацан) или "jarvis" (Джарвис)
+    fun persona(ctx: Context) = prefs(ctx).getString("persona", "cat") ?: "cat"
+
     fun systemPrompt(ctx: Context): String {
         val apps = installedApps(ctx).joinToString(", ") { it.first }
+        val style = if (persona(ctx) == "jarvis")
+            "Ты — Джарвис, спокойный, вежливый и точный ИИ-ассистент на телефоне. Отвечай по-русски, без 'мяу' и без кошачьих шуток."
+        else
+            "Ты — Барсик, дружелюбный серый кот-пацан и голосовой помощник на телефоне. Отвечай по-русски, коротко, с лёгким юмором (иногда \"мяу\")."
         return """
-Ты — Барсик, дружелюбный серый кот и голосовой помощник на телефоне. Отвечай по-русски, коротко, чуть игриво (иногда "мяу").
+$style
 Ответ ВСЕГДА строго JSON вида:
 {"reply":"текст пользователю","actions":[{"type":"...","arg":"..."}]}
 Доступные type:
@@ -112,6 +119,9 @@ object Brain {
 - "media_pause", "media_play", "media_stop", "media_next", "media_prev": управление музыкой и видео (arg пустой)
 - "volume_up", "volume_down": громкость
 - "timer": arg = число секунд
+- "alarm": arg = время в формате ЧЧ:ММ (будильник)
+- "flashlight_on", "flashlight_off": фонарик
+- "settings": открыть настройки телефона
 - "screen_task": arg = задача для управления экраном в других приложениях (нажать, ввести текст, открыть приложение и т.п.). Используй, когда пользователь просит что-то сделать внутри другого приложения.
 Если действий не нужно — "actions":[]. Не выдумывай приложения, которых нет в списке.
 Установленные приложения: $apps
@@ -141,6 +151,23 @@ object Brain {
                 "media_prev" -> media(ctx, KeyEvent.KEYCODE_MEDIA_PREVIOUS)
                 "volume_up" -> volume(ctx, AudioManager.ADJUST_RAISE)
                 "volume_down" -> volume(ctx, AudioManager.ADJUST_LOWER)
+                "flashlight_on" -> torch(ctx, true)
+                "flashlight_off" -> torch(ctx, false)
+                "alarm" -> {
+                    val (h, m) = arg.split(":").let {
+                        (it.getOrNull(0)?.toIntOrNull() ?: 7) to (it.getOrNull(1)?.toIntOrNull() ?: 0)
+                    }
+                    ctx.startActivity(
+                        Intent(AlarmClock.ACTION_SET_ALARM)
+                            .putExtra(AlarmClock.EXTRA_HOUR, h)
+                            .putExtra(AlarmClock.EXTRA_MINUTES, m)
+                            .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
+                "settings" -> ctx.startActivity(
+                    Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
                 "timer" -> ctx.startActivity(
                     Intent(AlarmClock.ACTION_SET_TIMER)
                         .putExtra(AlarmClock.EXTRA_LENGTH, arg.toDoubleOrNull()?.toInt() ?: 60)
@@ -170,6 +197,15 @@ object Brain {
         val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
         am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+    }
+
+    private fun torch(ctx: Context, on: Boolean) {
+        val cm = ctx.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+        for (id in cm.cameraIdList) {
+            val flash = cm.getCameraCharacteristics(id)
+                .get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) ?: false
+            if (flash) { cm.setTorchMode(id, on); return }
+        }
     }
 
     private fun volume(ctx: Context, dir: Int) {
