@@ -265,14 +265,28 @@ class MainActivity : AppCompatActivity() {
     private fun showMenu() {
         AlertDialog.Builder(this)
             .setTitle("Барсик")
-            .setItems(arrayOf("Сервис ИИ и ключ", "Включить управление экраном", "Очистить память")) { _, i ->
+            .setItems(arrayOf(
+                "Сервис ИИ и ключ",
+                "Включить управление экраном",
+                if (WakeService.running) "Выключить слушание «Барсик»" else "Слушать «Барсик» в фоне",
+                "Очистить память"
+            )) { _, i ->
                 when (i) {
                     0 -> pickProvider()
+                    2 -> {
+                        if (WakeService.running) {
+                            stopService(Intent(this, WakeService::class.java))
+                            Toast.makeText(this, "Слушание выключено", Toast.LENGTH_SHORT).show()
+                        } else {
+                            startForegroundService(Intent(this, WakeService::class.java))
+                            Toast.makeText(this, "Скажи «Барсик» — я услышу. Первый запуск распаковывает речевую модель", Toast.LENGTH_LONG).show()
+                        }
+                    }
                     1 -> {
                         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                         Toast.makeText(this, "Найди «Барсик» в списке и включи", Toast.LENGTH_LONG).show()
                     }
-                    2 -> {
+                    3 -> {
                         Brain.clearHistory(this)
                         while (history.length() > 0) history.remove(0)
                         msgs.removeAllViews()

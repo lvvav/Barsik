@@ -139,7 +139,7 @@ class BarsikService : AccessibilityService() {
     private val listener = object : RecognitionListener {
         override fun onResults(results: Bundle?) {
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-            if (!text.isNullOrBlank()) handleVoice(text) else say("Не расслышал")
+            if (!text.isNullOrBlank()) handleText(text) else say("Не расслышал")
         }
         override fun onError(error: Int) { say("Не расслышал, попробуй ещё раз") }
         override fun onReadyForSpeech(params: Bundle?) {}
@@ -167,7 +167,10 @@ class BarsikService : AccessibilityService() {
         say("Слушаю…")
     }
 
-    private fun handleVoice(raw: String) {
+    fun hasPending(): Boolean = pendingAct != null
+
+    // Текст команды: из микрофона по кнопке или из фонового слушания
+    fun handleText(raw: String) {
         val text = raw.trim().replaceFirst(Regex("^барсик[,! ]*", RegexOption.IGNORE_CASE), "").trim()
         worker.execute {
             try {
