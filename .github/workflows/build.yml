@@ -43,9 +43,21 @@ jobs:
             gh release create models-v1 ru.zip en.zip --title "Голосовые модели" --notes "Модели Vosk для распознавания речи"
           fi
 
+      - name: Restore signing keystore from secret
+        env:
+          KS_B64: ${{ secrets.BARSIK_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/barsik.jks"
+            echo "BARSIK_KEYSTORE=$RUNNER_TEMP/barsik.jks" >> "$GITHUB_ENV"
+          fi
+
       - name: Build debug APK
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          BARSIK_KS_PASS: ${{ secrets.BARSIK_KS_PASS }}
+          BARSIK_KEY_ALIAS: ${{ secrets.BARSIK_KEY_ALIAS }}
+          BARSIK_KEY_PASS: ${{ secrets.BARSIK_KEY_PASS }}
         run: gradle assembleDebug --no-daemon
 
       - name: Rename APK
