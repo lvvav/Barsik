@@ -38,7 +38,6 @@ import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
 
-private const val APK_URL = "https://github.com/lvvav/Barsik/releases/download/latest/Barsik.apk"
 private const val VERSION_URL = "https://github.com/lvvav/Barsik/releases/download/latest/version.txt"
 
 class MainActivity : AppCompatActivity() {
@@ -213,9 +212,7 @@ class MainActivity : AppCompatActivity() {
                         AlertDialog.Builder(this)
                             .setTitle("Есть обновление")
                             .setMessage("Вышла новая версия Барсика. Скачать и установить?")
-                            .setPositiveButton("Обновить") { _, _ ->
-                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(APK_URL)))
-                            }
+                            .setPositiveButton("Обновить") { _, _ -> AppUpdate.start(this) }
                             .setNegativeButton("Позже", null)
                             .show()
                     } else if (manual) {
@@ -233,26 +230,13 @@ class MainActivity : AppCompatActivity() {
     private fun showVoicePack() {
         val ruOk = ModelService.installed(filesDir, "ru")
         val enOk = ModelService.installed(filesDir, "en")
-        val cur = Brain.prefs(this).getString("lang", "ru")
+        // Скачанные языки работают сразу, отдельного переключения не нужно
         Glass.show(this, "Голосовое дополнение", listOf(
-            Glass.Row("🇷🇺", 0xFF2D9CDB.toInt(), if (ruOk) "Русский — скачан" else "Скачать русский",
-                if (ruOk) "Нажми, чтобы скачать заново" else "Нажми, чтобы скачать") { startDownload("ru") },
-            Glass.Row("🇬🇧", 0xFF5B8DEF.toInt(), if (enOk) "English — скачан" else "Скачать English",
-                if (enOk) "Нажми, чтобы скачать заново" else "Нажми, чтобы скачать") { startDownload("en") },
-            Glass.Row("🗣", 0xFF34C38F.toInt(), "Слушать на русском",
-                if (cur != "en") "Выбрано" else null) {
-                if (ruOk) setLang("ru") else Toast.makeText(this, "Сначала скачай русский", Toast.LENGTH_SHORT).show()
-            },
-            Glass.Row("💬", 0xFFBB6BD9.toInt(), "Слушать на английском",
-                if (cur == "en") "Выбрано" else null) {
-                if (enOk) setLang("en") else Toast.makeText(this, "Сначала скачай English", Toast.LENGTH_SHORT).show()
-            }
+            Glass.Row("🇷🇺", 0xFF2D9CDB.toInt(), if (ruOk) "Русский: установлен" else "Скачать русский",
+                if (ruOk) "Нажми, чтобы скачать заново" else "Слово «Барсик»") { startDownload("ru") },
+            Glass.Row("🇬🇧", 0xFF5B8DEF.toInt(), if (enOk) "English: установлен" else "Скачать English",
+                if (enOk) "Нажми, чтобы скачать заново" else "Слово «barsik»") { startDownload("en") }
         ))
-    }
-
-    private fun setLang(l: String) {
-        Brain.prefs(this).edit().putString("lang", l).apply()
-        Toast.makeText(this, "Язык голоса изменён. Перезапусти слушание «Барсик»", Toast.LENGTH_LONG).show()
     }
 
     private fun startDownload(l: String) {

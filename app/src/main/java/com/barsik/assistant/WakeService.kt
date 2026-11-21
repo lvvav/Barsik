@@ -19,7 +19,7 @@ import org.vosk.Model
 import org.vosk.Recognizer
 import java.io.File
 
-// Фоновое прослушивание слова «Барсик» офлайн (движок Vosk, модель русского языка)
+// Фоновое прослушивание слова «Барсик» офлайн: слушает сразу все скачанные языки (ru и en)
 class WakeService : Service() {
 
     companion object {
@@ -28,7 +28,7 @@ class WakeService : Service() {
     }
 
     private val main = Handler(Looper.getMainLooper())
-    private var model: Model? = null
+    private val models = mutableListOf<Model>()
     private var recorder: AudioRecord? = null
     @Volatile private var alive = false
     private var awaiting = false
@@ -55,9 +55,9 @@ class WakeService : Service() {
             startForeground(1, n)
         }
         if (!alive) {
-            val lang = Brain.prefs(this).getString("lang", "ru") ?: "ru"
-            // Модель скачивается в меню «Голосовое дополнение», здесь её только загружаем
-            if (!ModelService.installed(filesDir, lang)) {
+            // Берём все модели, которые уже скачаны в меню «Голосовое дополнение»
+            val langs = listOf("ru", "en").filter { ModelService.installed(filesDir, it) }
+            if (langs.isEmpty()) {
                 toast("Сначала скачай голосовое дополнение в меню 🔑")
                 stopSelf()
                 return START_NOT_STICKY
@@ -65,9 +65,10 @@ class WakeService : Service() {
             alive = true
             Thread {
                 try {
-                    model = Model(File(filesDir, "models/$lang").absolutePath)
+                    langs.forEach { models.add(Model(File(filesDir, "models/$it").absolutePath)) }
                     startListening()
                 } catch (e: Exception) {
+                    alive = false
                     toast("Не загрузилась речевая модель")
                     main.post { stopSelf() }
                 }
@@ -83,29 +84,31 @@ class WakeService : Service() {
             AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, buf)
         recorder = rec
         rec.startRecording()
-        val rcg = Recognizer(model, rate.toFloat())
+        val recs = models.map { Recognizer(it, rate.toFloat()) }
         Thread {
             val data = ByteArray(4000)
             while (alive) {
                 val n = rec.read(data, 0, data.size)
-                if (n > 0 && rcg.acceptWaveForm(data, n)) {
-                    handle(JSONObject(rcg.result).optString("text"))
+                if (n > 0) {
+                    // Один и тот же звук проходит через каждую модель, и любая может услышать слово
+                    for (r in recs) {
+                        if (r.acceptWaveForm(data, n)) handle(JSONObject(r.result).optString("text"))
+                    }
                 }
             }
             rec.stop()
             rec.release()
-            rcg.close()
+            recs.forEach { it.close() }
         }.start()
     }
 
     private fun handle(text: String) {
         if (text.isBlank()) return
-        val svc = BarsikService.instance
         val now = System.currentTimeMillis()
 
         // Если Барсик ждёт «да/нет» или мы уже услышали «Барсик» и ждём команду
         val waitingCommand = awaiting && now - awaitingSince < 8000
-        if ((svc?.hasPending() == true) || waitingCommand) {
+        if ((BarsikService.instance?.hasPending() == true) || waitingCommand) {
             awaiting = false
             dispatch(text)
             return
@@ -129,7 +132,7 @@ class WakeService : Service() {
     private fun dispatch(text: String) {
         val svc = BarsikService.instance
         if (svc == null) {
-            toast("Включи управление экраном: 🔑 → «Включить управление экраном»")
+            toast("Включи управление экраном: 🔑 → «Управление экраном»")
         } else {
             svc.handleText(text)
         }

@@ -16,8 +16,9 @@ import java.util.zip.ZipInputStream
 class ModelService : Service() {
 
     companion object {
-        const val RU_URL = "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip"
-        const val EN_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+        // Модели лежат в релизе models-v1 нашего репозитория (его кладёт CI из оригиналов Vosk)
+        const val RU_URL = "https://github.com/lvvav/Barsik/releases/download/models-v1/ru.zip"
+        const val EN_URL = "https://github.com/lvvav/Barsik/releases/download/models-v1/en.zip"
         const val CHANNEL = "barsik_models"
 
         @Volatile var active = false

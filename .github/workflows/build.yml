@@ -30,6 +30,19 @@ jobs:
           curl -fL -o app/src/main/res/raw/rus_root_ca.crt https://gu-st.ru/content/lending/russian_trusted_root_ca_pem.crt
           curl -fL -o app/src/main/res/raw/rus_sub_ca.crt https://gu-st.ru/content/lending/russian_trusted_sub_ca_pem.crt
 
+      # Голосовые модели кладём в свой релиз GitHub один раз: телефоны качают их оттуда,
+      # а не с alphacephei.com, который в некоторых регионах недоступен
+      - name: Publish voice models to a fixed release (once)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release view models-v1 >/dev/null 2>&1; then
+            curl -fL -o ru.zip https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip
+            curl -fL -o en.zip https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+            gh release create models-v1 ru.zip en.zip --title "Голосовые модели" --notes "Модели Vosk для распознавания речи"
+          fi
+
       - name: Build debug APK
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
