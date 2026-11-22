@@ -36,8 +36,8 @@ object Glass {
             background = GradientDrawable().apply {
                 cornerRadius = dp(28).toFloat()
                 // Матовое «запотевшее» стекло: плотная полупрозрачная заливка и светлая кромка
-                setColor(Color.argb(215, 38, 42, 56))
-                setStroke(dp(1), Color.argb(70, 255, 255, 255))
+                setColor(Color.argb(228, 26, 18, 12))
+                setStroke(dp(1), Color.argb(70, 242, 215, 184))
             }
         }
 
@@ -56,7 +56,7 @@ object Glass {
                 setPadding(dp(10), dp(10), dp(10), dp(10))
                 background = GradientDrawable().apply {
                     cornerRadius = dp(18).toFloat()
-                    setColor(Color.argb(22, 255, 255, 255))
+                    setColor(Color.argb(28, 242, 215, 184))
                 }
                 setOnClickListener { d.dismiss(); row.onTap() }
             }

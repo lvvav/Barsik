@@ -268,7 +268,7 @@ class MainActivity : AppCompatActivity() {
     private fun addBubble(text: String, user: Boolean, animate: Boolean = true): View {
         val tv = TextView(this).apply {
             this.text = text
-            setTextColor(Color.WHITE)
+            setTextColor(if (user) Color.parseColor("#1A120C") else Color.parseColor("#F5EBE0"))
             textSize = 16f
             setLineSpacing(dp(2).toFloat(), 1f)
             setPadding(dp(16), dp(10), dp(16), dp(10))
