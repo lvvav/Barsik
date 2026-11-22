@@ -33,6 +33,8 @@ class BarsikService : AccessibilityService() {
 
     companion object {
         var instance: BarsikService? = null
+        // Название приложения, которое сейчас открыто (только название, не содержимое экрана)
+        @Volatile var currentApp: String = ""
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -84,7 +86,15 @@ class BarsikService : AccessibilityService() {
         super.onDestroy()
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    // Срабатывает при смене окна/приложения: запоминаем только его название
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        val pkg = event.packageName?.toString() ?: return
+        if (pkg == packageName || pkg.startsWith("com.android.systemui")) return
+        currentApp = try {
+            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+        } catch (e: Exception) { pkg }
+    }
     override fun onInterrupt() {}
 
     // ---------- плавающий Барсик ----------
