@@ -372,9 +372,44 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- меню и настройки ----------
 
+    // Перерисовывает чат из history (после открытия или создания чата)
+    private fun showChat() {
+        msgs.removeAllViews()
+        if (history.length() == 0) {
+            addBubble(greeting, false)
+            return
+        }
+        for (i in 0 until history.length()) {
+            val m = history.getJSONObject(i)
+            val isUser = m.optString("role") == "user"
+            val text = if (isUser) m.optString("content")
+            else Brain.parseReply(m.optString("content")).optString("reply", m.optString("content"))
+            addBubble(text, isUser, animate = false)
+        }
+    }
+
+    private fun showChatList() {
+        val chats = Brain.savedChats(this)
+        if (chats.isEmpty()) {
+            Toast.makeText(this, "Сохранённых чатов пока нет", Toast.LENGTH_SHORT).show()
+            return
+        }
+        Glass.show(this, "Мои чаты", chats.map { (i, title) ->
+            Glass.Row("💬", 0xFF9B51E0.toInt(), title, null) {
+                history = Brain.openChat(this, i)
+                showChat()
+            }
+        })
+    }
+
     private fun showMenu() {
         val pillOn = Brain.prefs(this).getBoolean("pill_on", true)
         Glass.show(this, "Барсик", listOf(
+            Glass.Row("➕", 0xFF2F80ED.toInt(), "Новый чат", "Текущий сохранится в «Мои чаты»") {
+                history = Brain.newChat(this)
+                showChat()
+            },
+            Glass.Row("🗂", 0xFF9B51E0.toInt(), "Мои чаты", "Сохранённые разговоры") { showChatList() },
             Glass.Row("🔑", 0xFF5B8DEF.toInt(), "Сервис ИИ и ключ", "Выбрать нейросеть") { pickProvider() },
             Glass.Row("👆", 0xFF34C38F.toInt(), "Управление экраном", "Включить в специальных возможностях") {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))

@@ -51,6 +51,54 @@ object Brain {
         prefs(ctx).edit().remove("history").apply()
     }
 
+    // ---------- несколько чатов: текущий и архивные ----------
+
+    private fun chatsArr(ctx: Context): JSONArray =
+        try { JSONArray(prefs(ctx).getString("chats", "[]")) } catch (e: Exception) { JSONArray() }
+
+    // Заголовок чата — первые слова первого вопроса пользователя
+    private fun titleOf(h: JSONArray): String {
+        for (i in 0 until h.length()) {
+            val m = h.getJSONObject(i)
+            if (m.optString("role") == "user") return m.optString("content").take(40)
+        }
+        return "Пустой чат"
+    }
+
+    // Архивные чаты: индекс и заголовок
+    fun savedChats(ctx: Context): List<Pair<Int, String>> {
+        val a = chatsArr(ctx)
+        return (0 until a.length()).map { it to a.getJSONObject(it).optString("title") }
+    }
+
+    // Текущий чат уходит в архив, открывается пустой
+    fun newChat(ctx: Context): JSONArray {
+        archiveCurrent(ctx)
+        clearHistory(ctx)
+        return JSONArray()
+    }
+
+    // Открыть архивный чат: текущий уходит в архив, выбранный становится текущим
+    fun openChat(ctx: Context, index: Int): JSONArray {
+        val a = chatsArr(ctx)
+        val chosen = JSONArray(a.getJSONObject(index).optString("history", "[]"))
+        val rest = JSONArray()
+        for (i in 0 until a.length()) if (i != index) rest.put(a.get(i))
+        prefs(ctx).edit().putString("chats", rest.toString()).apply()
+        archiveCurrent(ctx)
+        prefs(ctx).edit().putString("history", chosen.toString()).apply()
+        return chosen
+    }
+
+    private fun archiveCurrent(ctx: Context) {
+        val cur = loadHistory(ctx)
+        if (cur.length() == 0) return
+        val a = chatsArr(ctx)
+        a.put(JSONObject().put("title", titleOf(cur)).put("history", cur.toString()))
+        while (a.length() > 30) a.remove(0)
+        prefs(ctx).edit().putString("chats", a.toString()).apply()
+    }
+
     // ---------- разговор ----------
 
     fun chat(ctx: Context, h: JSONArray, userText: String): JSONObject {
