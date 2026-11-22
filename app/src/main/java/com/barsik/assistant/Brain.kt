@@ -14,6 +14,8 @@ import java.net.URL
 // Всё, что связано с ИИ и действиями: память, запрос к сервису, команды телефона
 object Brain {
     private const val MAX_HISTORY = 40
+    private const val SEND_HISTORY = 8
+    private const val SEND_CHARS = 1200
     const val DEFAULT_URL = "https://text.pollinations.ai/openai"
     const val DEFAULT_MODEL = "openai"
 
@@ -153,7 +155,13 @@ object Brain {
     // Системное сообщение + история; extra — временное сообщение, в историю не попадает
     private fun buildMessages(ctx: Context, h: JSONArray, extra: String?): JSONArray {
         val messages = JSONArray().put(JSONObject().put("role", "system").put("content", systemPrompt(ctx)))
-        for (i in 0 until h.length()) messages.put(h.getJSONObject(i))
+        // В запрос уходят только последние сообщения и с ограниченной длиной: иначе каждый запрос весит десятки тысяч токенов
+        val from = maxOf(0, h.length() - SEND_HISTORY)
+        for (i in from until h.length()) {
+            val m = h.getJSONObject(i)
+            val c = m.optString("content")
+            messages.put(JSONObject().put("role", m.optString("role")).put("content", c.take(SEND_CHARS)))
+        }
         if (extra != null) messages.put(JSONObject().put("role", "user").put("content", extra))
         return messages
     }
