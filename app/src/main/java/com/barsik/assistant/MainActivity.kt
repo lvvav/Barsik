@@ -123,6 +123,13 @@ class MainActivity : AppCompatActivity() {
         keyBtn.setOnClickListener { showMenu() }
         listOf(sendBtn, micBtn, keyBtn).forEach { it.pressable() }
 
+        // Чип с текущей моделью: тап открывает выбор нейросети
+        findViewById<TextView>(R.id.modelChip).apply {
+            setOnClickListener { pickProvider() }
+            pressable()
+        }
+        refreshModelChip()
+
         // Быстрые кнопки: отправляют готовую команду
         mapOf(
             R.id.chipFlash to "включи фонарик",
@@ -509,6 +516,12 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    // Показывает короткое имя текущей модели в нижней панели (например, «llama-3.3-70b»)
+    private fun refreshModelChip() {
+        val full = Brain.aiModel(this).substringAfterLast('/')
+        findViewById<TextView>(R.id.modelChip).text = full.ifBlank { "модель" }
+    }
+
     private fun showSettings(url: String, model: String) {
         fun field(h: String, v: String) = EditText(this).apply {
             hint = h; setText(v); setSingleLine(true)
@@ -530,6 +543,7 @@ class MainActivity : AppCompatActivity() {
                     .putString("model", fModel.text.toString().trim())
                     .putString("key", fKey.text.toString().trim())
                     .apply()
+                refreshModelChip()
                 Banner.show(this, "Сохранено")
             }
             .setNegativeButton("Отмена", null)
