@@ -210,19 +210,17 @@ class MainActivity : AppCompatActivity() {
                 c.disconnect()
                 runOnUiThread {
                     if (latest > BuildConfig.VERSION_CODE) {
-                        AlertDialog.Builder(this)
-                            .setTitle("Есть обновление")
-                            .setMessage("Вышла новая версия Барсика. Скачать и установить?")
-                            .setPositiveButton("Обновить") { _, _ -> AppUpdate.start(this) }
-                            .setNegativeButton("Позже", null)
-                            .show()
+                        Glass.show(this, "Вышло обновление", listOf(
+                            Glass.Row("⬇", 0xFFF2B77A.toInt(), "Обновить", "Скачать и установить новую версию") { AppUpdate.start(this) },
+                            Glass.Row("🕓", 0xFF8C6A4E.toInt(), "Позже", null) {}
+                        ))
                     } else if (manual) {
-                        Toast.makeText(this, "У тебя последняя версия", Toast.LENGTH_SHORT).show()
+                        Banner.show(this, "У тебя последняя версия")
                     }
                 }
             } catch (e: Exception) {
                 if (manual) runOnUiThread {
-                    Toast.makeText(this, "Не удалось проверить обновление", Toast.LENGTH_SHORT).show()
+                    Banner.show(this, "Не удалось проверить обновление")
                 }
             }
         }.start()
@@ -242,7 +240,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startDownload(l: String) {
         if (ModelService.active) {
-            Toast.makeText(this, "Загрузка уже идёт", Toast.LENGTH_SHORT).show()
+            Banner.show(this, "Загрузка уже идёт")
         } else {
             ContextCompat.startForegroundService(this, Intent(this, ModelService::class.java).putExtra("lang", l))
         }
@@ -324,7 +322,7 @@ class MainActivity : AppCompatActivity() {
             putExtra(RecognizerIntent.EXTRA_PROMPT, "Говори с Барсиком")
         }
         try { voice.launch(i) } catch (e: Exception) {
-            Toast.makeText(this, "Голосовой ввод недоступен", Toast.LENGTH_SHORT).show()
+            Banner.show(this, "Голосовой ввод недоступен")
         }
     }
 
@@ -392,7 +390,7 @@ class MainActivity : AppCompatActivity() {
     private fun showChatList() {
         val chats = Brain.savedChats(this)
         if (chats.isEmpty()) {
-            Toast.makeText(this, "Сохранённых чатов пока нет", Toast.LENGTH_SHORT).show()
+            Banner.show(this, "Сохранённых чатов пока нет")
             return
         }
         Glass.show(this, "Мои чаты", chats.map { (i, title) ->
@@ -414,16 +412,16 @@ class MainActivity : AppCompatActivity() {
             Glass.Row("🔑", 0xFF5B8DEF.toInt(), "Сервис ИИ и ключ", "Выбрать нейросеть") { pickProvider() },
             Glass.Row("👆", 0xFF34C38F.toInt(), "Управление экраном", "Включить в специальных возможностях") {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                Toast.makeText(this, "Найди «Барсик» в списке и включи", Toast.LENGTH_LONG).show()
+                Banner.show(this, "Найди «Барсик» в списке и включи")
             },
             Glass.Row("👂", 0xFFF2994A.toInt(), "Слушать «Барсик»",
                 if (WakeService.running) "Сейчас включено" else "Выключено") {
                 if (WakeService.running) {
                     stopService(Intent(this, WakeService::class.java))
-                    Toast.makeText(this, "Слушание выключено", Toast.LENGTH_SHORT).show()
+                    Banner.show(this, "Слушание выключено")
                 } else {
                     startForegroundService(Intent(this, WakeService::class.java))
-                    Toast.makeText(this, "Скажи «Барсик» — я услышу", Toast.LENGTH_LONG).show()
+                    Banner.show(this, "Скажи «Барсик» — я услышу")
                 }
             },
             Glass.Row("🎙", 0xFFBB6BD9.toInt(), "Голос и стиль", "Стиль, озвучка, скорость") { showVoiceSettings() },
@@ -450,7 +448,7 @@ class MainActivity : AppCompatActivity() {
             Glass.Row("🎭", 0xFFBB6BD9.toInt(), "Стиль", if (jarvis) "Джарвис" else "Кот-пацан") {
                 p.edit().putString("persona", if (jarvis) "cat" else "jarvis").apply()
                 BarsikService.instance?.applyVoiceSettings()
-                Toast.makeText(this, "Стиль изменён", Toast.LENGTH_SHORT).show()
+                Banner.show(this, "Стиль изменён")
             },
             Glass.Row("🔊", 0xFF34C38F.toInt(), "Озвучка ответов", if (voiceOn) "Включена" else "Выключена") {
                 p.edit().putBoolean("voice_on", !voiceOn).apply()
@@ -476,7 +474,7 @@ class MainActivity : AppCompatActivity() {
         if (svc != null) {
             svc.setPillVisible(on)
         } else {
-            Toast.makeText(this, "Сначала включи управление экраном", Toast.LENGTH_SHORT).show()
+            Banner.show(this, "Сначала включи управление экраном")
         }
     }
 
@@ -524,7 +522,7 @@ class MainActivity : AppCompatActivity() {
                     .putString("model", fModel.text.toString().trim())
                     .putString("key", fKey.text.toString().trim())
                     .apply()
-                Toast.makeText(this, "Сохранено", Toast.LENGTH_SHORT).show()
+                Banner.show(this, "Сохранено")
             }
             .setNegativeButton("Отмена", null)
             .show()
