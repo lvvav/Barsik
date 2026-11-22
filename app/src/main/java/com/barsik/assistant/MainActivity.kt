@@ -350,6 +350,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun send(text: String) {
         addBubble(text, true)
+        // Простые команды выполняем сразу, без нейросети
+        Brain.localCommand(text)?.let { (type, arg, reply) ->
+            Brain.execute(this, type, arg)
+            addBubble(reply, false)
+            return
+        }
         showTyping()
         Thread {
             try {

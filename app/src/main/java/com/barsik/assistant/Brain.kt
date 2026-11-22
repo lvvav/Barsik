@@ -332,6 +332,41 @@ $about
             .sortedBy { it.first.lowercase() }
     }
 
+    // ---------- простые команды без нейросети: работают, даже когда лимит ИИ исчерпан ----------
+
+    // Возвращает (действие, аргумент, ответ пользователю) или null, если команда сложная
+    fun localCommand(text: String): Triple<String, String, String>? {
+        val t = text.lowercase()
+        if (t.contains("фонар")) {
+            return when {
+                Regex("выключ|выкл|погаси|отключ").containsMatchIn(t) -> Triple("flashlight_off", "", "Фонарик выключил")
+                Regex("включ|вкл|зажги").containsMatchIn(t) -> Triple("flashlight_on", "", "Фонарик включил")
+                else -> null
+            }
+        }
+        if (t.contains("таймер")) {
+            val m = Regex("(\\d+)\\s*(сек|мин|час)").find(t) ?: return null
+            val n = m.groupValues[1].toLong()
+            val secs = when {
+                m.groupValues[2].startsWith("сек") -> n
+                m.groupValues[2].startsWith("мин") -> n * 60
+                else -> n * 3600
+            }
+            return Triple("timer", secs.toString(), "Таймер поставил")
+        }
+        if (t.contains("будильник")) {
+            val m = Regex("(\\d{1,2})(?::(\\d{2}))?").find(t) ?: return null
+            val h = m.groupValues[1].toInt()
+            val min = m.groupValues[2].ifEmpty { "0" }.toInt()
+            if (h > 23 || min > 59) return null
+            return Triple("alarm", "$h:${"%02d".format(min)}", "Будильник поставил на ${"%02d".format(h)}:${"%02d".format(min)}")
+        }
+        if (Regex("пауз|останов").containsMatchIn(t) && t.contains("музык") || t == "пауза") {
+            return Triple("media_pause", "", "Музыку поставил на паузу")
+        }
+        return null
+    }
+
     // ---------- действия на телефоне ----------
 
     fun execute(ctx: Context, type: String, arg: String) {
