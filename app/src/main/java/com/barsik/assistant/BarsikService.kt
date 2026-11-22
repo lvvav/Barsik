@@ -43,6 +43,17 @@ class BarsikService : AccessibilityService() {
     private var recognizer: SpeechRecognizer? = null
     private var label: TextView? = null
     private var overlay: View? = null
+    private var cat: CatView? = null
+    private val sleepLater = Runnable { cat?.setState(CatView.State.SLEEP) }
+
+    // Кот просыпается и через 8 секунд снова засыпает, если к нему никто не обращается
+    private fun wake(s: CatView.State = CatView.State.AWAKE) {
+        main.post {
+            cat?.setState(s)
+            main.removeCallbacks(sleepLater)
+            if (s != CatView.State.LISTEN) main.postDelayed(sleepLater, 8000)
+        }
+    }
     private var pendingAct: JSONObject? = null
     private var pendingNodes: List<AccessibilityNodeInfo> = emptyList()
     private val hideLabel = Runnable { label?.visibility = View.GONE }
@@ -99,16 +110,8 @@ class BarsikService : AccessibilityService() {
             setPadding(dp(6), dp(6), dp(18), dp(6))
             setBackgroundResource(R.drawable.bg_glass_pill)
         }
-        val av = ImageView(this).apply {
-            setImageResource(R.drawable.barsik_avatar)
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            outlineProvider = object : ViewOutlineProvider() {
-                override fun getOutline(v: View, o: Outline) {
-                    o.setOval(0, 0, v.width, v.height)
-                }
-            }
-            clipToOutline = true
-        }
+        val av = CatView(this)
+        cat = av
         val name = TextView(this).apply {
             text = "Барсик"
             setTextColor(Color.WHITE)
@@ -220,6 +223,7 @@ class BarsikService : AccessibilityService() {
     }
 
     private fun listen() {
+        wake(CatView.State.LISTEN)
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             say("Голос на этом телефоне недоступен")
             return
@@ -239,6 +243,7 @@ class BarsikService : AccessibilityService() {
 
     // Текст команды: из микрофона по кнопке или из фонового слушания
     fun handleText(raw: String) {
+        wake()
         val text = raw.trim().replaceFirst(Regex("^барсик[,! ]*", RegexOption.IGNORE_CASE), "").trim()
         worker.execute {
             try {

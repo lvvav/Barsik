@@ -28,7 +28,7 @@ object Brain {
     fun migrate(ctx: Context) {
         val p = prefs(ctx)
         if (!p.getBoolean("migrated_builtin", false)) {
-            p.edit().remove("url").remove("model").remove("key").putBoolean("migrated_builtin", true).apply()
+            p.edit().remove("url").remove("model").remove("key").putBoolean("pill_on", true).putBoolean("migrated_builtin", true).apply()
         }
     }
 
