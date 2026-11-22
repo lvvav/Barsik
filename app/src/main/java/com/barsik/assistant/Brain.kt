@@ -23,6 +23,15 @@ object Brain {
     // Язык системного распознавания берётся из настроек телефона: отдельный выбор не нужен
     fun voiceLocale(ctx: Context) = java.util.Locale.getDefault().toLanguageTag()
 
+    // Один раз сбрасываем сохранённый адрес, модель и ключ, которые выбирались вручную через 🔑:
+    // иначе они перекрывают встроенную нейросеть
+    fun migrate(ctx: Context) {
+        val p = prefs(ctx)
+        if (!p.getBoolean("migrated_builtin", false)) {
+            p.edit().remove("url").remove("model").remove("key").putBoolean("migrated_builtin", true).apply()
+        }
+    }
+
     fun apiKey(ctx: Context): String {
         val saved = prefs(ctx).getString("key", "") ?: ""
         return if (saved.isNotBlank()) saved else BuildConfig.AI_KEY

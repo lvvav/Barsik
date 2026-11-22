@@ -172,6 +172,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Память: показываем прошлый разговор, он сохраняется между запусками
+        Brain.migrate(this)
         history = Brain.loadHistory(this)
         if (history.length() == 0) {
             msgs.postDelayed({ addBubble(greeting, false) }, 400)
