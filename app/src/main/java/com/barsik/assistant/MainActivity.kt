@@ -14,6 +14,7 @@ import android.speech.RecognizerIntent
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.ViewOutlineProvider
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
@@ -349,8 +350,8 @@ class MainActivity : AppCompatActivity() {
                 val res = Brain.chat(this, history, text)
                 runOnUiThread {
                     hideTyping()
-                    addBubble(res.optString("reply", "Мяу!"), false)
                     addSources(res.optJSONArray("sources"))
+                    addBubble(res.optString("reply", "Мяу!"), false)
                     runActions(res.optJSONArray("actions"))
                 }
             } catch (e: Exception) {
@@ -393,47 +394,66 @@ class MainActivity : AppCompatActivity() {
             val parsed = if (isUser) null else Brain.parseReply(m.optString("content"))
             val text = if (isUser) m.optString("content")
             else parsed!!.optString("reply", m.optString("content"))
-            addBubble(text, isUser, animate = false)
             if (parsed != null) addSources(parsed.optJSONArray("sources"), animate = false)
+            addBubble(text, isUser, animate = false)
         }
     }
 
-    // Источники поиска: кружки с первой буквой сайта; тап раскрывает подробности
+    // Значки источников: до трёх мелких кружков с логотипами сайтов над ответом; тап открывает список
     private fun addSources(arr: JSONArray?, animate: Boolean = true) {
         if (arr == null || arr.length() == 0) return
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(4), dp(2), 0, dp(4))
+            setPadding(dp(6), dp(2), 0, dp(2))
+            setOnClickListener { showSources(arr) }
         }
-        val palette = listOf(0xFFF2B77A, 0xFFE58F65, 0xFFC9A66B, 0xFFD97B66, 0xFFA8926B).map { it.toInt() }
-        for (i in 0 until minOf(arr.length(), 5)) {
-            val src = arr.getJSONObject(i)
-            val host = hostOf(src.optString("url"))
-            val circle = TextView(this).apply {
+        for (i in 0 until minOf(arr.length(), 3)) {
+            val host = hostOf(arr.getJSONObject(i).optString("url"))
+            val letter = TextView(this).apply {
                 text = host.firstOrNull()?.uppercase() ?: "?"
                 gravity = Gravity.CENTER
                 setTextColor(Color.parseColor("#1A120C"))
-                textSize = 12f
+                textSize = 9f
                 typeface = Ui.font(this@MainActivity)
+            }
+            val logo = android.widget.ImageView(this).apply {
+                scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                visibility = View.GONE
+            }
+            val circle = android.widget.FrameLayout(this).apply {
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(palette[Math.abs(host.hashCode()) % palette.size])
-                    setStroke(dp(2), Color.parseColor("#1E1510"))
+                    setColor(Color.parseColor("#F5EBE0"))
                 }
-                pressable()
-                setOnClickListener { showSources(arr) }
+                clipToOutline = true
+                addView(letter, android.widget.FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                addView(logo, android.widget.FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             }
-            row.addView(circle, LinearLayout.LayoutParams(dp(26), dp(26)).apply { marginEnd = dp(-6) })
+            row.addView(circle, LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(5) })
+            // Логотип сайта грузим в фоне; если не вышло, остаётся буква
+            Thread {
+                try {
+                    val c = URL("https://www.google.com/s2/favicons?sz=64&domain=$host").openConnection() as HttpURLConnection
+                    c.connectTimeout = 8000
+                    c.readTimeout = 8000
+                    val bmp = c.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) }
+                    if (bmp != null) runOnUiThread {
+                        logo.setImageBitmap(bmp)
+                        logo.visibility = View.VISIBLE
+                        letter.visibility = View.GONE
+                    }
+                } catch (_: Exception) {}
+            }.start()
         }
-        row.setOnClickListener { showSources(arr) }
         msgs.addView(row, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { gravity = Gravity.START; topMargin = dp(2); bottomMargin = dp(6) })
+        ).apply { gravity = Gravity.START; topMargin = dp(4); bottomMargin = dp(1) })
         if (animate) {
             row.alpha = 0f
             row.animate().alpha(1f).setDuration(350).start()
         }
-        scroll.postDelayed({ scroll.smoothScrollTo(0, msgs.bottom) }, 80)
     }
 
     private fun hostOf(url: String): String =
