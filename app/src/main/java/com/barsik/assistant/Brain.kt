@@ -10,7 +10,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import java.net.URLEncoder
 
 // Всё, что связано с ИИ и действиями: память, запрос к сервису, команды телефона
 object Brain {
@@ -113,15 +112,66 @@ object Brain {
     fun chat(ctx: Context, h: JSONArray, userText: String): JSONObject {
         h.put(JSONObject().put("role", "user").put("content", userText))
         try {
-            val messages = JSONArray().put(JSONObject().put("role", "system").put("content", systemPrompt(ctx)))
-            for (i in 0 until h.length()) messages.put(h.getJSONObject(i))
-            val text = post(ctx, messages)
-            h.put(JSONObject().put("role", "assistant").put("content", text))
+            var res = parseReply(post(ctx, buildMessages(ctx, h, null)))
+            val sources = JSONArray()
+
+            // Модель сама решила искать: делаем поиск и отдаём результаты ей же на финальный ответ
+            val query = res.optJSONArray("actions")?.let { arr ->
+                (0 until arr.length()).map { arr.getJSONObject(it) }
+                    .firstOrNull { it.optString("type") == "search" }?.optString("arg")
+            }
+            if (!query.isNullOrBlank() && BuildConfig.AI_URL.isNotBlank()) {
+                val found = webSearch(query)
+                val lines = StringBuilder()
+                for (i in 0 until found.length()) {
+                    val r = found.getJSONObject(i)
+                    sources.put(JSONObject().put("title", r.optString("title")).put("url", r.optString("url")))
+                    lines.append("[${i + 1}] ${r.optString("title")} (${r.optString("url")}): ${r.optString("content")}\n")
+                }
+                val note = if (found.length() == 0) "По запросу «$query» ничего не найдено."
+                else "Результаты поиска по запросу «$query»:\n$lines"
+                res = parseReply(post(ctx, buildMessages(ctx, h,
+                    note + "\nОтветь на последний вопрос пользователя, опираясь на результаты. " +
+                        "Если в результатах нет ответа, так и скажи. Поле actions оставь пустым. Ссылки в тексте не перечисляй.")))
+            }
+
+            val reply = res.optString("reply", "Мяу?")
+            // Сохраняем ответ вместе с источниками, чтобы они показывались и после перезапуска
+            val stored = JSONObject().put("reply", reply).put("sources", sources)
+            h.put(JSONObject().put("role", "assistant").put("content", stored.toString()))
             saveHistory(ctx, h)
-            return parseReply(text)
+            return JSONObject()
+                .put("reply", reply)
+                .put("actions", res.optJSONArray("actions") ?: JSONArray())
+                .put("sources", sources)
         } catch (e: Exception) {
             h.remove(h.length() - 1)
             throw e
+        }
+    }
+
+    // Системное сообщение + история; extra — временное сообщение, в историю не попадает
+    private fun buildMessages(ctx: Context, h: JSONArray, extra: String?): JSONArray {
+        val messages = JSONArray().put(JSONObject().put("role", "system").put("content", systemPrompt(ctx)))
+        for (i in 0 until h.length()) messages.put(h.getJSONObject(i))
+        if (extra != null) messages.put(JSONObject().put("role", "user").put("content", extra))
+        return messages
+    }
+
+    // Поиск через прокси Supabase (Tavily): возвращает массив {title, url, content}
+    private fun webSearch(query: String): JSONArray {
+        return try {
+            val c = URL(BuildConfig.AI_URL).openConnection() as HttpURLConnection
+            c.requestMethod = "POST"
+            c.connectTimeout = 15000
+            c.readTimeout = 30000
+            c.doOutput = true
+            c.setRequestProperty("Content-Type", "application/json")
+            c.outputStream.use { it.write(JSONObject().put("action", "search").put("query", query).toString().toByteArray()) }
+            if (c.responseCode !in 200..299) JSONArray()
+            else JSONObject(readBody(c)).optJSONArray("results") ?: JSONArray()
+        } catch (e: Exception) {
+            JSONArray()
         }
     }
 
@@ -242,7 +292,7 @@ $about
 Ответ ВСЕГДА строго JSON вида:
 {"reply":"текст пользователю","actions":[{"type":"...","arg":"..."}]}
 Доступные type:
-- "search": arg = поисковый запрос
+- "search": arg = поисковый запрос. Используй ТОЛЬКО когда нужны свежие сведения (новости, курсы, погода, события, кто сейчас занимает пост) или факты, которых ты не знаешь. На обычные вопросы не ищи. Результаты придут следующим сообщением, а ты ответишь по ним и actions оставишь пустым.
 - "open_url": arg = полный URL
 - "open_app": arg = точное название приложения из списка установленных
 - "media_pause", "media_play", "media_stop", "media_next", "media_prev": управление музыкой и видео (arg пустой)
@@ -271,7 +321,6 @@ $about
     fun execute(ctx: Context, type: String, arg: String) {
         try {
             when (type) {
-                "search" -> open(ctx, "https://www.google.com/search?q=" + URLEncoder.encode(arg, "UTF-8"))
                 "open_url" -> open(ctx, arg)
                 "open_app" -> openApp(ctx, arg)
                 "media_pause" -> media(ctx, KeyEvent.KEYCODE_MEDIA_PAUSE)

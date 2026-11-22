@@ -30,6 +30,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -349,6 +350,7 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     hideTyping()
                     addBubble(res.optString("reply", "Мяу!"), false)
+                    addSources(res.optJSONArray("sources"))
                     runActions(res.optJSONArray("actions"))
                 }
             } catch (e: Exception) {
@@ -388,10 +390,64 @@ class MainActivity : AppCompatActivity() {
         for (i in 0 until history.length()) {
             val m = history.getJSONObject(i)
             val isUser = m.optString("role") == "user"
+            val parsed = if (isUser) null else Brain.parseReply(m.optString("content"))
             val text = if (isUser) m.optString("content")
-            else Brain.parseReply(m.optString("content")).optString("reply", m.optString("content"))
+            else parsed!!.optString("reply", m.optString("content"))
             addBubble(text, isUser, animate = false)
+            if (parsed != null) addSources(parsed.optJSONArray("sources"), animate = false)
         }
+    }
+
+    // Источники поиска: кружки с первой буквой сайта; тап раскрывает подробности
+    private fun addSources(arr: JSONArray?, animate: Boolean = true) {
+        if (arr == null || arr.length() == 0) return
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(4), dp(2), 0, dp(4))
+        }
+        val palette = listOf(0xFFF2B77A, 0xFFE58F65, 0xFFC9A66B, 0xFFD97B66, 0xFFA8926B).map { it.toInt() }
+        for (i in 0 until minOf(arr.length(), 5)) {
+            val src = arr.getJSONObject(i)
+            val host = hostOf(src.optString("url"))
+            val circle = TextView(this).apply {
+                text = host.firstOrNull()?.uppercase() ?: "?"
+                gravity = Gravity.CENTER
+                setTextColor(Color.parseColor("#1A120C"))
+                textSize = 12f
+                typeface = Ui.font(this@MainActivity)
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(palette[Math.abs(host.hashCode()) % palette.size])
+                    setStroke(dp(2), Color.parseColor("#1E1510"))
+                }
+                pressable()
+                setOnClickListener { showSources(arr) }
+            }
+            row.addView(circle, LinearLayout.LayoutParams(dp(26), dp(26)).apply { marginEnd = dp(-6) })
+        }
+        row.setOnClickListener { showSources(arr) }
+        msgs.addView(row, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { gravity = Gravity.START; topMargin = dp(2); bottomMargin = dp(6) })
+        if (animate) {
+            row.alpha = 0f
+            row.animate().alpha(1f).setDuration(350).start()
+        }
+        scroll.postDelayed({ scroll.smoothScrollTo(0, msgs.bottom) }, 80)
+    }
+
+    private fun hostOf(url: String): String =
+        try { java.net.URI(url).host?.removePrefix("www.") ?: url } catch (e: Exception) { url }
+
+    private fun showSources(arr: JSONArray) {
+        val rows = (0 until arr.length()).map { i ->
+            val s = arr.getJSONObject(i)
+            Glass.Row(R.drawable.ic_folder, s.optString("title").take(70).ifBlank { "Страница" },
+                hostOf(s.optString("url"))) {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(s.optString("url"))))
+            }
+        }
+        Glass.show(this, "Источники", rows)
     }
 
     private fun showChatList() {
