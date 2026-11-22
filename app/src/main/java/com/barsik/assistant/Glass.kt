@@ -31,11 +31,11 @@ object Glass {
     )
 
     fun show(act: Activity, title: String, rows: List<Row>) {
-        show(act, title, listOf(null to rows))
+        showSections(act, title, listOf(null to rows))
     }
 
     // sections: пары (заголовок секции или null, строки); каждая секция — отдельный островок
-    fun show(act: Activity, title: String, sections: List<Pair<String?, List<Row>>>) {
+    fun showSections(act: Activity, title: String, sections: List<Pair<String?, List<Row>>>) {
         val dp = { v: Int -> (v * act.resources.displayMetrics.density).toInt() }
         val d = Dialog(act)
         d.requestWindowFeature(Window.FEATURE_NO_TITLE)

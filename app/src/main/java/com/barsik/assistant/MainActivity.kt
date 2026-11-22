@@ -492,7 +492,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showMenu() {
         val pillOn = Brain.prefs(this).getBoolean("pill_on", true)
-        Glass.show(this, "Барсик", listOf(
+        Glass.showSections(this, "Барсик", listOf(
             "Чаты" to listOf(
                 Glass.Row(R.drawable.ic_plus, "Новый чат", "Текущий сохранится в «Мои чаты»") {
                     history = Brain.newChat(this)
@@ -542,7 +542,7 @@ class MainActivity : AppCompatActivity() {
         val jarvis = Brain.persona(this) == "jarvis"
         val voiceOn = p.getBoolean("voice_on", true)
         val speedName = speeds.firstOrNull { it.second == p.getFloat("speed", 1.0f) }?.first ?: "Норма"
-        Glass.show(this, "Голос и стиль", listOf(
+        Glass.showSections(this, "Голос и стиль", listOf(
             "Голос" to listOf(
                 Glass.Row(R.drawable.ic_star, "Стиль", if (jarvis) "Джарвис" else "Кот-пацан") {
                     p.edit().putString("persona", if (jarvis) "cat" else "jarvis").apply()
