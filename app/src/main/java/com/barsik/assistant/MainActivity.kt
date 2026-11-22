@@ -600,8 +600,14 @@ class MainActivity : AppCompatActivity() {
 
     // Показывает короткое имя текущей модели в нижней панели (например, «llama-3.3-70b»)
     private fun refreshModelChip() {
-        val full = Brain.aiModel(this).substringAfterLast('/')
-        findViewById<TextView>(R.id.modelChip).text = full.ifBlank { "модель" }
+        val id = Brain.aiModel(this).substringAfterLast('/')
+        // Короткое понятное имя вместо длинного идентификатора модели
+        val label = when {
+            id.contains("llama-3.3", true) -> "Llama 3.3"
+            id.contains("llama", true) -> "Llama"
+            else -> id.substringBefore('-').take(12)
+        }
+        findViewById<TextView>(R.id.modelChip).text = label.ifBlank { "Модель" }
     }
 
     private fun showSettings(url: String, model: String) {
