@@ -86,6 +86,24 @@ class BarsikService : AccessibilityService() {
         super.onDestroy()
     }
 
+    // Текст, который видно на экране прямо сейчас (без паролей), чтобы модель понимала контекст
+    fun screenText(maxChars: Int = 1500): String {
+        val root = rootInActiveWindow ?: return ""
+        // Окно самого Барсика не читаем: там его же переписка
+        if (root.packageName?.toString() == packageName) return ""
+        val out = LinkedHashSet<String>()
+        fun walk(n: AccessibilityNodeInfo?, depth: Int) {
+            if (n == null || depth > 40) return
+            if (!n.isPassword) {
+                n.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let { out.add(it) }
+                n.contentDescription?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let { out.add(it) }
+            }
+            for (i in 0 until n.childCount) walk(n.getChild(i), depth + 1)
+        }
+        walk(root, 0)
+        return out.joinToString(" | ").take(maxChars)
+    }
+
     // Срабатывает при смене окна/приложения: запоминаем только его название
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return

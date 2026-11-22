@@ -275,9 +275,11 @@ object Brain {
         // Модель не знает текущую дату сама, поэтому сообщаем её при каждом запросе
         val today = java.text.SimpleDateFormat("d MMMM yyyy, EEEE, HH:mm", java.util.Locale("ru")).format(java.util.Date())
         val openApp = BarsikService.currentApp
-        val screen = if (openApp.isNotBlank())
-            "\nСейчас на экране открыто приложение: $openApp. Знаешь только его название, содержимого экрана не видишь. Учитывай это, если вопрос похож на «что это» или «что делать дальше»."
-        else ""
+        val text = BarsikService.instance?.screenText().orEmpty()
+        val screen = buildString {
+            if (openApp.isNotBlank()) append("\nСейчас на экране открыто приложение: $openApp.")
+            if (text.isNotBlank()) append("\nЧто сейчас видно на экране пользователя (текст элементов): $text\nЕсли он говорит «это», «добавь в корзину», «купи», «открой вот это» — ориентируйся на этот текст и на то, что он делает, а не на догадки. Не выполняй действия на экране без его просьбы.")
+        }
         val about = """Сейчас: $today (местное время). Опирайся на эту дату, а не на свои обучающие данные, когда речь о текущем годе, дне и событиях.$screen
 О тебе:
 - Тебя зовут Барсик, ты ИИ-ассистент приложения «Барсик».
