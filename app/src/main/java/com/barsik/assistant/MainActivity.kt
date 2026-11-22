@@ -211,8 +211,8 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (latest > BuildConfig.VERSION_CODE) {
                         Glass.show(this, "Вышло обновление", listOf(
-                            Glass.Row("⬇", 0xFFF2B77A.toInt(), "Обновить", "Скачать и установить новую версию") { AppUpdate.start(this) },
-                            Glass.Row("🕓", 0xFF8C6A4E.toInt(), "Позже", null) {}
+                            Glass.Row(R.drawable.ic_download, "Обновить", "Скачать и установить новую версию") { AppUpdate.start(this) },
+                            Glass.Row(R.drawable.ic_refresh, "Позже", null) {}
                         ))
                     } else if (manual) {
                         Banner.show(this, "У тебя последняя версия")
@@ -231,9 +231,9 @@ class MainActivity : AppCompatActivity() {
         val enOk = ModelService.installed(filesDir, "en")
         // Скачанные языки работают сразу, отдельного переключения не нужно
         Glass.show(this, "Голосовое дополнение", listOf(
-            Glass.Row("🇷🇺", 0xFF2D9CDB.toInt(), if (ruOk) "Русский: установлен" else "Скачать русский",
+            Glass.Row(R.drawable.ic_download, if (ruOk) "Русский: установлен" else "Скачать русский",
                 if (ruOk) "Нажми, чтобы скачать заново" else "Слово «Барсик»") { startDownload("ru") },
-            Glass.Row("🇬🇧", 0xFF5B8DEF.toInt(), if (enOk) "English: установлен" else "Скачать English",
+            Glass.Row(R.drawable.ic_download, if (enOk) "English: установлен" else "Скачать English",
                 if (enOk) "Нажми, чтобы скачать заново" else "Слово «barsik»") { startDownload("en") }
         ))
     }
@@ -394,7 +394,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         Glass.show(this, "Мои чаты", chats.map { (i, title) ->
-            Glass.Row("💬", 0xFF9B51E0.toInt(), title, null) {
+            Glass.Row(R.drawable.ic_folder, title, null) {
                 history = Brain.openChat(this, i)
                 showChat()
             }
@@ -404,37 +404,46 @@ class MainActivity : AppCompatActivity() {
     private fun showMenu() {
         val pillOn = Brain.prefs(this).getBoolean("pill_on", true)
         Glass.show(this, "Барсик", listOf(
-            Glass.Row("➕", 0xFF2F80ED.toInt(), "Новый чат", "Текущий сохранится в «Мои чаты»") {
-                history = Brain.newChat(this)
-                showChat()
-            },
-            Glass.Row("🗂", 0xFF9B51E0.toInt(), "Мои чаты", "Сохранённые разговоры") { showChatList() },
-            Glass.Row("🔑", 0xFF5B8DEF.toInt(), "Сервис ИИ и ключ", "Выбрать нейросеть") { pickProvider() },
-            Glass.Row("👆", 0xFF34C38F.toInt(), "Управление экраном", "Включить в специальных возможностях") {
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                Banner.show(this, "Найди «Барсик» в списке и включи")
-            },
-            Glass.Row("👂", 0xFFF2994A.toInt(), "Слушать «Барсик»",
-                if (WakeService.running) "Сейчас включено" else "Выключено") {
-                if (WakeService.running) {
-                    stopService(Intent(this, WakeService::class.java))
-                    Banner.show(this, "Слушание выключено")
-                } else {
-                    startForegroundService(Intent(this, WakeService::class.java))
-                    Banner.show(this, "Скажи «Барсик» — я услышу")
-                }
-            },
-            Glass.Row("🎙", 0xFFBB6BD9.toInt(), "Голос и стиль", "Стиль, озвучка, скорость") { showVoiceSettings() },
-            Glass.Row("📦", 0xFF2D9CDB.toInt(), "Голосовое дополнение", "Языки распознавания речи") { showVoicePack() },
-            Glass.Row("🐾", 0xFFEB5757.toInt(), if (pillOn) "Скрыть Барсика" else "Показать Барсика",
-                "Плавающая кнопка на экране") { toggleOverlay() },
-            Glass.Row("🧹", 0xFFD4A017.toInt(), "Очистить память", "Забыть прошлый разговор") {
-                Brain.clearHistory(this)
-                while (history.length() > 0) history.remove(0)
-                msgs.removeAllViews()
-                addBubble("Память очищена. Мяу!", false)
-            },
-            Glass.Row("🔄", 0xFF27AE60.toInt(), "Проверить обновления", "Скачать новую версию") { checkUpdate(true) }
+            "Чаты" to listOf(
+                Glass.Row(R.drawable.ic_plus, "Новый чат", "Текущий сохранится в «Мои чаты»") {
+                    history = Brain.newChat(this)
+                    showChat()
+                },
+                Glass.Row(R.drawable.ic_folder, "Мои чаты", "Сохранённые разговоры") { showChatList() }
+            ),
+            "ИИ" to listOf(
+                Glass.Row(R.drawable.ic_key, "Сервис ИИ и ключ", "Выбрать нейросеть") { pickProvider() }
+            ),
+            "Голос и экран" to listOf(
+                Glass.Row(R.drawable.ic_touch, "Управление экраном", "Включить в специальных возможностях") {
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    Banner.show(this, "Найди «Барсик» в списке и включи")
+                },
+                Glass.Row(R.drawable.ic_mic, "Слушать «Барсик»",
+                    if (WakeService.running) "Сейчас включено" else "Выключено") {
+                    if (WakeService.running) {
+                        stopService(Intent(this, WakeService::class.java))
+                        Banner.show(this, "Слушание выключено")
+                    } else {
+                        startForegroundService(Intent(this, WakeService::class.java))
+                        Banner.show(this, "Скажи «Барсик» — я услышу")
+                    }
+                },
+                Glass.Row(R.drawable.ic_volume, "Голос и стиль", "Стиль, озвучка, скорость") { showVoiceSettings() },
+                Glass.Row(R.drawable.ic_download, "Голосовое дополнение", "Языки распознавания речи") { showVoicePack() }
+            ),
+            "Прочее" to listOf(
+                Glass.Row(if (pillOn) R.drawable.ic_visibility_off else R.drawable.ic_star,
+                    if (pillOn) "Скрыть Барсика" else "Показать Барсика",
+                    "Плавающая кнопка на экране") { toggleOverlay() },
+                Glass.Row(R.drawable.ic_trash, "Очистить память", "Забыть прошлый разговор") {
+                    Brain.clearHistory(this)
+                    while (history.length() > 0) history.remove(0)
+                    msgs.removeAllViews()
+                    addBubble("Память очищена. Мяу!", false)
+                },
+                Glass.Row(R.drawable.ic_refresh, "Проверить обновления", "Скачать новую версию") { checkUpdate(true) }
+            )
         ))
     }
 
@@ -445,24 +454,25 @@ class MainActivity : AppCompatActivity() {
         val voiceOn = p.getBoolean("voice_on", true)
         val speedName = speeds.firstOrNull { it.second == p.getFloat("speed", 1.0f) }?.first ?: "Норма"
         Glass.show(this, "Голос и стиль", listOf(
-            Glass.Row("🎭", 0xFFBB6BD9.toInt(), "Стиль", if (jarvis) "Джарвис" else "Кот-пацан") {
-                p.edit().putString("persona", if (jarvis) "cat" else "jarvis").apply()
-                BarsikService.instance?.applyVoiceSettings()
-                Banner.show(this, "Стиль изменён")
-            },
-            Glass.Row("🔊", 0xFF34C38F.toInt(), "Озвучка ответов", if (voiceOn) "Включена" else "Выключена") {
-                p.edit().putBoolean("voice_on", !voiceOn).apply()
-                BarsikService.instance?.applyVoiceSettings()
-            },
-            Glass.Row("⏩", 0xFFF2994A.toInt(), "Скорость голоса", speedName) {
-                Glass.show(this, "Скорость голоса", speeds.map { s ->
-                    Glass.Row(if (s.second < 1f) "🐢" else if (s.second > 1f) "🐇" else "⚖️",
-                        0xFFF2994A.toInt(), s.first, null) {
-                        p.edit().putFloat("speed", s.second).apply()
-                        BarsikService.instance?.applyVoiceSettings()
-                    }
-                })
-            }
+            "Голос" to listOf(
+                Glass.Row(R.drawable.ic_star, "Стиль", if (jarvis) "Джарвис" else "Кот-пацан") {
+                    p.edit().putString("persona", if (jarvis) "cat" else "jarvis").apply()
+                    BarsikService.instance?.applyVoiceSettings()
+                    Banner.show(this, "Стиль изменён")
+                },
+                Glass.Row(R.drawable.ic_volume, "Озвучка ответов", if (voiceOn) "Включена" else "Выключена") {
+                    p.edit().putBoolean("voice_on", !voiceOn).apply()
+                    BarsikService.instance?.applyVoiceSettings()
+                },
+                Glass.Row(R.drawable.ic_refresh, "Скорость голоса", speedName) {
+                    Glass.show(this, "Скорость голоса", speeds.map { s ->
+                        Glass.Row(R.drawable.ic_refresh, s.first, null) {
+                            p.edit().putFloat("speed", s.second).apply()
+                            BarsikService.instance?.applyVoiceSettings()
+                        }
+                    })
+                }
+            )
         ))
     }
 
@@ -489,10 +499,8 @@ class MainActivity : AppCompatActivity() {
     )
 
     private fun pickProvider() {
-        val icons = listOf("🆓", "🇫🇷", "⚡", "🔍", "🌐", "🇷🇺", "✏️")
-        val colors = listOf(0xFF27AE60, 0xFF5B8DEF, 0xFFF2994A, 0xFF2D9CDB, 0xFFBB6BD9, 0xFFEB5757, 0xFF8E8E9A)
-        Glass.show(this, "Какой ИИ использовать?", presets.mapIndexed { i, p ->
-            Glass.Row(icons[i], colors[i].toInt(), p.first, null) {
+        Glass.show(this, "Какой ИИ использовать?", presets.map { p ->
+            Glass.Row(R.drawable.ic_key, p.first, null) {
                 showSettings(
                     p.second.ifEmpty { Brain.aiUrl(this) },
                     p.third.ifEmpty { Brain.aiModel(this) }
