@@ -350,14 +350,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun send(text: String) {
         addBubble(text, true)
-        // «позвони маме»: звонок по имени из контактов, без нейросети
-        Regex("^(позвони|звони)\\s+(.+)$", RegexOption.IGNORE_CASE).find(text.trim())?.let { m ->
-            val name = m.groupValues[2].trim().trimEnd('.', '!')
-            val c = Dialer.findByName(this, name)
-            addBubble(if (c == null) "Не нашёл «$name» в контактах" else "Звоню: ${c.name}", false)
-            if (c != null) Dialer.call(this, c.number)
-            return
-        }
         // Простые команды выполняем сразу, без нейросети
         Brain.localCommand(text)?.let { (type, arg, reply) ->
             Brain.execute(this, type, arg)
@@ -507,11 +499,6 @@ class MainActivity : AppCompatActivity() {
     private fun showMenu() {
         val pillOn = Brain.prefs(this).getBoolean("pill_on", true)
         Glass.showSections(this, "Барсик", listOf(
-            "Звонки" to listOf(
-                Glass.Row(R.drawable.ic_phone, "Звонки", "Контакты, история и набор номера") {
-                    startActivity(Intent(this, DialerActivity::class.java))
-                }
-            ),
             "Чаты" to listOf(
                 Glass.Row(R.drawable.ic_plus, "Новый чат", "Текущий сохранится в «Мои чаты»") {
                     history = Brain.newChat(this)
