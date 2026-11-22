@@ -19,18 +19,18 @@ class CatView(ctx: Context) : View(ctx) {
     var state = State.SLEEP
         private set
 
-    private val fill = Paint(Paint.ANTI_ALIAS).apply { color = Color.parseColor("#F2B77A") }
-    private val ink = Paint(Paint.ANTI_ALIAS).apply {
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#F2B77A") }
+    private val ink = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#1A120C")
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
     }
-    private val inkFill = Paint(Paint.ANTI_ALIAS).apply { color = Color.parseColor("#1A120C") }
-    private val pulse = Paint(Paint.ANTI_ALIAS).apply {
+    private val inkFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#1A120C") }
+    private val pulse = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#F2B77A")
         style = Paint.Style.STROKE
     }
-    private val zPaint = Paint(Paint.ANTI_ALIAS).apply { color = Color.parseColor("#F5EBE0") }
+    private val zPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#F5EBE0") }
 
     private var t = 0f
 
