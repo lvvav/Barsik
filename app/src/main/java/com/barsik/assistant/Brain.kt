@@ -28,8 +28,8 @@ object Brain {
         return if (saved.isNotBlank()) saved else BuildConfig.AI_KEY
     }
 
-    // Если ключ OpenRouter вшит в сборку, по умолчанию используем его, иначе бесплатный Pollinations
-    private val embeddedOpenRouter get() = BuildConfig.AI_KEY.isNotBlank()
+    // Если в сборке задан адрес встроенной нейросети, используем её, иначе бесплатный Pollinations
+    private val embeddedOpenRouter get() = BuildConfig.AI_URL.isNotBlank()
 
     fun aiUrl(ctx: Context) = prefs(ctx).getString("url", null)?.takeIf { it.isNotBlank() }
         ?: if (embeddedOpenRouter) BuildConfig.AI_URL else DEFAULT_URL

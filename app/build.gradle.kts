@@ -20,11 +20,9 @@ android {
             abiFilters += listOf("arm64-v8a")
         }
 
-        // Ключ подставляется при сборке из секрета OPENROUTER_API_KEY (в репозитории его нет)
-        val key = System.getenv("OPENROUTER_API_KEY") ?: ""
-        buildConfigField("String", "AI_KEY", "\"$key\"")
-        // Встроенная нейросеть: Cloudflare Workers AI. Ключ — токен Cloudflare из секрета OPENROUTER_API_KEY
-        buildConfigField("String", "AI_URL", "\"https://api.cloudflare.com/client/v4/accounts/766c7c1985b628a23b73cb672143711a/ai/v1/chat/completions\"")
+        // Ключей в приложении больше нет: нейросеть вызывается через функцию Supabase, а ключи лежат на её сервере
+        buildConfigField("String", "AI_KEY", "\"\"")
+        buildConfigField("String", "AI_URL", "\"https://akdqarvetsrtmzbsorvo.supabase.co/functions/v1/ask\"")
         buildConfigField("String", "AI_MODEL", "\"@cf/meta/llama-3.3-70b-instruct-fp8-fast\"")
     }
 
