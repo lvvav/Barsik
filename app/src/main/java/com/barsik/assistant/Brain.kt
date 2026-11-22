@@ -165,7 +165,10 @@ object Brain {
 
     fun systemPrompt(ctx: Context): String {
         val apps = installedApps(ctx).joinToString(", ") { it.first }
-        val about = """О тебе:
+        // Модель не знает текущую дату сама, поэтому сообщаем её при каждом запросе
+        val today = java.text.SimpleDateFormat("d MMMM yyyy, EEEE", java.util.Locale("ru")).format(java.util.Date())
+        val about = """Сегодня: $today. Опирайся на эту дату, а не на свои обучающие данные, когда речь о текущем годе, дне и событиях.
+О тебе:
 - Тебя зовут Барсик, ты ИИ-ассистент приложения «Барсик».
 - Языковая модель, на которой ты работаешь: ${aiModel(ctx)}.
 - Тебя создал и тобой владеет Данила Зотова (GitHub: lvvav).
